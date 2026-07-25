@@ -18,7 +18,7 @@ query ($search: String, $page: Int) {
       id
       title { romaji english }
       startDate { year }
-      coverImage { large }
+      coverImage { extraLarge large }
       averageScore
       genres
       format
@@ -60,7 +60,7 @@ query ($sort: [MediaSort], $page: Int) {
     media(type: ANIME, sort: $sort) {
       id
       title { romaji english }
-      coverImage { large }
+      coverImage { extraLarge large }
       averageScore
       genres
       episodes
@@ -77,7 +77,7 @@ query ($genre: String, $page: Int) {
     media(type: ANIME, genre: $genre, sort: POPULARITY_DESC) {
       id
       title { romaji english }
-      coverImage { large }
+      coverImage { extraLarge large }
       averageScore
     }
   }
@@ -122,7 +122,7 @@ class AniListSource(AnimeSource):
                 "anilist_id": m["id"],
                 "title": _best_title(m["title"]),
                 "year": (m.get("startDate") or {}).get("year"),
-                "poster_url": (m.get("coverImage") or {}).get("large"),
+                "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
                 "rating": round(score / 10, 1) if score else None,
                 "genres": (m.get("genres") or [])[:3],
                 "format": m.get("format"),
@@ -164,7 +164,7 @@ class AniListSource(AnimeSource):
             "related_ids": related_ids,
         }
 
-    # -- Extra: powers the News tab's Trending/Popular feeds (not part of the shared interface) --
+    # -- Extra: powers Home's Trending/Top Airing feeds (not part of the shared interface) --
 
     def _cached(self, key: str, fetch):
         now = time.time()
@@ -183,7 +183,7 @@ class AniListSource(AnimeSource):
                 score = m.get("averageScore")
                 out.append({
                     "title": _best_title(m["title"]),
-                    "poster_url": (m.get("coverImage") or {}).get("large"),
+                    "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
                     "rating": round(score / 10, 1) if score else None,
                     "anilist_id": m["id"],
                     "genres": (m.get("genres") or [])[:3],
@@ -208,7 +208,7 @@ class AniListSource(AnimeSource):
                 score = m.get("averageScore")
                 out.append({
                     "title": _best_title(m["title"]),
-                    "poster_url": (m.get("coverImage") or {}).get("large"),
+                    "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
                     "rating": round(score / 10, 1) if score else None,
                     "anilist_id": m["id"],
                 })
