@@ -23,7 +23,6 @@ import json
 import re
 import secrets
 import time
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl, quote
 
 import requests
@@ -992,6 +991,9 @@ def api_search_track():
     query = (payload.get("query") or "").strip()
     if query:
         db.record_search(query)
+        user = current_user()
+        if user:
+            db.record_recent_search(user["id"], query)
     return jsonify(status="ok")
 
 
@@ -1010,45 +1012,22 @@ def api_search_clear():
     return jsonify(status="cleared")
 
 
-_genre_thumbs_cache: dict = {}  # genre -> (fetched_at, thumbnail_url)
+@app.get("/api/search/recent")
+def api_search_recent():
+    user = current_user()
+    if not user:
+        return jsonify([])
+    limit = request.args.get("limit", 10, type=int)
+    return jsonify(db.get_recent_searches(user["id"], limit))
 
 
-@app.get("/api/genres")
-def api_genres():
-    now = time.time()
-
-    def fetch_one(g):
-        try:
-            return g, SOURCES["anilist"].get_genre_thumbnail(g)
-        except requests.RequestException:
-            return g, None
-
-    stale = [
-        g for g in GENRES
-        if g not in _genre_thumbs_cache or now - _genre_thumbs_cache[g][0] >= Config.CATALOG_CACHE_TTL
-    ]
-
-    if stale:
-        # Small stagger instead of firing every request in the same instant —
-        # spreads the burst out enough to avoid tripping AniList's rate limit
-        # on most requests at once, on top of the retry-with-backoff in _post.
-        with ThreadPoolExecutor(max_workers=min(4, len(stale))) as pool:
-            futures = []
-            for i, g in enumerate(stale):
-                time.sleep(0.05 if i else 0)
-                futures.append(pool.submit(fetch_one, g))
-            for future in futures:
-                g, thumb = future.result()
-                # Only overwrite the cache on success — a failure keeps
-                # whatever thumbnail (possibly stale) we had before, rather
-                # than blanking out a tile that was working a moment ago.
-                if thumb:
-                    _genre_thumbs_cache[g] = (now, thumb)
-                elif g not in _genre_thumbs_cache:
-                    _genre_thumbs_cache[g] = (0, None)
-
-    out = [{"genre": g, "thumbnail": _genre_thumbs_cache.get(g, (0, None))[1]} for g in GENRES]
-    return jsonify(out)
+@app.post("/api/search/recent/clear")
+def api_search_recent_clear():
+    user = current_user()
+    if not user:
+        abort(403)
+    db.clear_recent_searches(user["id"])
+    return jsonify(status="cleared")
 
 
 @app.get("/api/search/anime")

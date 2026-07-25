@@ -8,30 +8,6 @@ bot runs in the same process via a Telegram webhook.
 
 - **`/anidex`** — welcome message with an Open Mini App button (`/start` stays silent).
   The message text is fully editable via `START_MSG` (see `.env.example`).
-- **`/addpost <name>`** — admin-only. Searches AniList, shows paginated
-  results, and on your pick, creates the post directly under **Available**
-  — then prompts you to just send the join link as your next message.
-- **`/editpost <name>`** — admin-only. Finds a matching post (or lets you
-  pick, if several match), then asks for the new join link. Shows a
-  preview with Done/Cancel before saving.
-- **`/delpost <name>`** — admin-only. Deletes a matching post (or lets you
-  choose which one, if several match).
-- **`/ad <duration>`** — admin-only. Starts a short wizard (image URL →
-  caption → optional link) for a promotional card shown at the top of the
-  Available tab. Duration examples: `/ad 1 day`, `/ad 3 hours`, `/ad 10 m`.
-- **`/rmad`** — admin-only. Ends the active ad immediately and reports its
-  final tap/click stats.
-- **`/adstats`** — admin-only. Shows the active ad's live tap/click counts
-  and time remaining.
-- **`/wbroadcast <duration>`** — admin-only. Same wizard pattern as `/ad`
-  (image URL → caption → optional link), but posts into the mini app's
-  **Notifications** tab instead of the Available tab, exactly as sent,
-  until it expires.
-- **`/refreshposts`** — admin-only. Re-syncs every posted anime's metadata
-  from AniList (rating, description, airing status) and flags any that
-  just finished airing all episodes. Manual, since this process has no
-  background scheduler — see the note near the bottom of this file.
-- **`/cmds`** — lists every command, tailored to whether you're an admin.
 - **Auto-search** — send the bot any plain text (not a command) and it
   searches your **Available** library only, replying with just the
   title and a button that deep-links straight into the mini app at that
