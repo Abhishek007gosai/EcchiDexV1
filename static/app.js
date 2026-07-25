@@ -107,6 +107,9 @@
   const searchLanding = el("search-landing");
   const popularSearchList = el("popular-search-list");
   const popularSearchClear = el("popular-search-clear");
+  const recentSearchSection = el("recent-search-section");
+  const recentSearchList = el("recent-search-list");
+  const recentSearchClear = el("recent-search-clear");
   const genreTileGrid = el("genre-tile-grid");
   const genreBrowseGrid = el("genre-browse-grid");
   const genreViewTitle = el("genre-view-title");
@@ -829,13 +832,13 @@
   // Search page
   // ---------------------------------------------------------------------
   const GENRES = ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Romance", "Sci-Fi", "Horror"];
-  let genreThumbs = {};
 
   function renderSearchLanding() {
     searchViewInput.value = "";
     searchResults.classList.add("hidden");
     searchLanding.classList.remove("hidden");
     renderPopularSearches();
+    renderRecentSearches();
     renderGenreTiles();
   }
 
@@ -854,11 +857,41 @@
         <span class="popular-search-arrow">\u2197</span>`;
       row.addEventListener("click", () => {
         searchViewInput.value = item.query;
-        runLibrarySearch(item.query, false);
+        runLibrarySearch(item.query);
       });
       popularSearchList.appendChild(row);
     });
   }
+
+  async function renderRecentSearches() {
+    recentSearchList.innerHTML = "";
+    let items = [];
+    try {
+      items = await api("/api/search/recent?limit=10");
+    } catch (err) { /* silently empty */ }
+    recentSearchSection.classList.toggle("hidden", items.length === 0);
+    items.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "popular-search-row";
+      row.innerHTML = `<span class="popular-search-icon">\u{1F551}</span>
+        <span class="popular-search-text">${escapeHtml(item.query)}</span>
+        <span class="popular-search-arrow">\u2197</span>`;
+      row.addEventListener("click", () => {
+        searchViewInput.value = item.query;
+        runLibrarySearch(item.query);
+      });
+      recentSearchList.appendChild(row);
+    });
+  }
+
+  recentSearchClear.addEventListener("click", async () => {
+    try {
+      await api("/api/search/recent/clear", { method: "POST" });
+      renderRecentSearches();
+    } catch (err) {
+      showToast(err.message || "Couldn't clear recent searches");
+    }
+  });
 
   popularSearchClear.addEventListener("click", async () => {
     try {
@@ -869,39 +902,57 @@
     }
   });
 
+  const GENRE_SYMBOLS = {
+    "Action": {
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5 20.5 9.5 9.5 20.5 3.5 14.5Z"/><path d="M17.5 6.5 20.5 3.5"/><path d="M6.5 17.5 3.5 20.5"/><path d="M11 9 15 13"/></svg>',
+    },
+    "Adventure": {
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m14.5 9.5-2 5-5 2 2-5Z"/></svg>',
+    },
+    "Comedy": {
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M8.5 9h.01"/><path d="M15.5 9h.01"/></svg>',
+    },
+    "Drama": {
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5c2 0 3 1.5 3 3.5S6 12 6 14c0 2 1.5 3 3.5 3"/><path d="M20 5c-2 0-3 1.5-3 3.5s1 3.5 1 5.5c0 2-1.5 3-3.5 3"/><circle cx="9" cy="8" r=".6" fill="currentColor" stroke="none"/><circle cx="15" cy="8" r=".6" fill="currentColor" stroke="none"/></svg>',
+    },
+    "Fantasy": {
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 11l9 10 9-10Z"/><path d="M12 3v18"/><path d="M3 11h18"/></svg>',
+    },
+    "Romance": {
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-9.5-9C.9 7.6 3 4 6.5 4 9 4 11 6 12 7.5 13 6 15 4 17.5 4 21 4 23.1 7.6 21.5 11 19 15.6 12 20 12 20Z"/></svg>',
+    },
+    "Sci-Fi": {
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2.5 4 6 4 10 0 3-1 6-4 10-3-4-4-7-4-10 0-4 1.5-7.5 4-10Z"/><circle cx="12" cy="10" r="1.6"/><path d="M9 17c-1.5 1-2.5 2.5-3 4.5 2-.5 3.5-1.5 4.5-3"/><path d="M15 17c1.5 1 2.5 2.5 3 4.5-2-.5-3.5-1.5-4.5-3"/></svg>',
+    },
+    "Horror": {
+      svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V11a7 7 0 0 1 14 0v10l-2.5-2-2 2-2.5-2-2 2-2.5-2Z"/><path d="M9 11h.01"/><path d="M15 11h.01"/></svg>',
+    },
+  };
+
   function renderGenreTiles() {
     genreTileGrid.innerHTML = "";
-    const tileByGenre = {};
     GENRES.forEach((g) => {
+      const meta = GENRE_SYMBOLS[g] || {
+        svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>',
+      };
       const tile = document.createElement("div");
       tile.className = "genre-tile";
-      thumbImg(tile, genreThumbs[g], g);
-      const label = document.createElement("div");
-      label.className = "genre-tile-label";
-      label.innerHTML = `<span class="genre-tile-name">${g.toUpperCase()}</span><span class="genre-tile-explore">Explore &rsaquo;</span>`;
-      tile.appendChild(label);
+      const icon = document.createElement("span");
+      icon.className = "genre-tile-icon";
+      icon.innerHTML = meta.svg;
+      tile.appendChild(icon);
+      const name = document.createElement("span");
+      name.className = "genre-tile-name";
+      name.textContent = g;
+      tile.appendChild(name);
       tile.addEventListener("click", () => openGenreView(g));
       genreTileGrid.appendChild(tile);
-      tileByGenre[g] = tile;
     });
-
-    if (Object.keys(genreThumbs).length) return; // already fetched this session
-
-    api("/api/genres").then((data) => {
-      data.forEach((g) => {
-        genreThumbs[g.genre] = g.thumbnail;
-        if (!g.thumbnail) return;
-        const tile = tileByGenre[g.genre];
-        if (!tile) return;
-        tile.querySelectorAll("img, .generated-thumb").forEach((n) => n.remove());
-        thumbImg(tile, g.thumbnail, g.genre);
-      });
-    }).catch(() => { /* placeholders stay as-is */ });
   }
 
-  const trackSearch = debounce((q) => {
-    api("/api/search/track", { method: "POST", body: JSON.stringify({ query: q }) }).catch(() => {});
-  }, 600);
+  function trackConfirmedSearch(title) {
+    api("/api/search/track", { method: "POST", body: JSON.stringify({ query: title } ) }).catch(() => {});
+  }
 
   let searchQuery = "";
   let searchPage = 1;
@@ -945,7 +996,7 @@
     return row;
   }
 
-  async function runLibrarySearch(q, track = true) {
+  async function runLibrarySearch(q) {
     const query = q.trim();
     if (!query) { renderSearchLanding(); return; }
     searchQuery = query;
@@ -959,7 +1010,10 @@
     const byTitle = availableByTitle();
     const localMatches = available.filter((a) => a.title.toLowerCase().includes(query.toLowerCase()));
     localMatches.forEach((item) => {
-      searchResultsGroups.appendChild(searchResultRow(item, () => openLocalDetail(item)));
+      searchResultsGroups.appendChild(searchResultRow(item, () => {
+        trackConfirmedSearch(item.title);
+        openLocalDetail(item);
+      }));
     });
 
     const myToken = ++searchToken;
@@ -973,14 +1027,16 @@
         if (localTitles.has(item.title.toLowerCase())) return; // already shown above
         const matched = byTitle.get(item.title.toLowerCase());
         item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-        searchResultsGroups.appendChild(searchResultRow(item, () => openDiscoverDetail(item)));
+        searchResultsGroups.appendChild(searchResultRow(item, () => {
+          trackConfirmedSearch(item.title);
+          openDiscoverDetail(item);
+        }));
       });
       searchResultsEmpty.classList.toggle("hidden", searchResultsGroups.children.length !== 0);
     } catch (err) {
       searchResultsEmpty.classList.toggle("hidden", searchResultsGroups.children.length !== 0);
     }
     searchLoading = false;
-    if (track) trackSearch(query);
   }
 
   async function loadMoreSearchResults() {
@@ -1020,12 +1076,21 @@
   // ---------------------------------------------------------------------
   // Genre browse view
   // ---------------------------------------------------------------------
+  let genreViewName = "";
+  let genrePage = 1;
+  let genreHasNext = false;
+  let genreLoading = false;
+
   async function openGenreView(genre) {
     showView("genre");
+    genreViewName = genre;
+    genrePage = 1;
+    genreHasNext = false;
     genreViewTitle.textContent = genre;
     genreBrowseGrid.innerHTML = "";
     try {
-      const data = await api(`/api/genres/${encodeURIComponent(genre)}`);
+      const data = await api(`/api/genres/${encodeURIComponent(genre)}?page=1`);
+      genreHasNext = !!data.has_next;
       data.results.forEach((item) => {
         genreBrowseGrid.appendChild(simplePosterCard(item, () => openGenreItemDetail(item)));
       });
@@ -1033,6 +1098,26 @@
       showToast("Couldn't load that genre right now.");
     }
   }
+
+  async function loadMoreGenre() {
+    if (genreLoading || !genreHasNext || !genreViewName) return;
+    genreLoading = true;
+    try {
+      const data = await api(`/api/genres/${encodeURIComponent(genreViewName)}?page=${genrePage + 1}`);
+      genrePage += 1;
+      genreHasNext = !!data.has_next;
+      data.results.forEach((item) => {
+        genreBrowseGrid.appendChild(simplePosterCard(item, () => openGenreItemDetail(item)));
+      });
+    } catch (err) { /* stop silently, user can keep scrolling to retry */ }
+    genreLoading = false;
+  }
+
+  window.addEventListener("scroll", debounce(() => {
+    if (genreView.classList.contains("hidden")) return;
+    const nearBottom = window.scrollY + window.innerHeight > document.documentElement.scrollHeight - 400;
+    if (nearBottom) loadMoreGenre();
+  }, 150));
 
   // ---------------------------------------------------------------------
   // Profile
