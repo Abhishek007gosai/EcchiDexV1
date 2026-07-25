@@ -96,9 +96,8 @@
   const appView = el("app-view");
   const searchView = el("search-view");
   const genreView = el("genre-view");
-  const notificationsView = el("notifications-view");
   const profileView = el("profile-view");
-  const allViews = { app: appView, search: searchView, genre: genreView, notifications: notificationsView, profile: profileView };
+  const allViews = { app: appView, search: searchView, genre: genreView, profile: profileView };
 
   const homeSearchInput = el("search-input");
   const searchViewInput = el("search-view-input");
@@ -131,9 +130,6 @@
   const adSlot = el("ad-slot");
 
   const navBtns = document.querySelectorAll(".nav-btn");
-  const notifBadge = el("notif-badge");
-  const notificationsList = el("notifications-list");
-  const notificationsEmpty = el("notifications-empty");
 
   const detailOverlay = el("detail-overlay");
   const detailPoster = el("detail-poster");
@@ -191,7 +187,7 @@
   }
 
   // ---------------------------------------------------------------------
-  // Top-level navigation (Home / Search / Notifications / Profile)
+  // Top-level navigation (Home / Search / Profile)
   // ---------------------------------------------------------------------
   function showView(name) {
     Object.entries(allViews).forEach(([key, node]) => node.classList.toggle("hidden", key !== name));
@@ -204,7 +200,6 @@
     const target = btn.dataset.nav;
     if (target === "home") showView("app");
     else if (target === "search") { showView("search"); renderSearchLanding(); }
-    else if (target === "notifications") { showView("notifications"); loadNotifications(); }
     else if (target === "profile") { showView("profile"); openProfile(); }
   }));
 
@@ -287,14 +282,16 @@
   function popularGridCard(item, onOpen) {
     const card = document.createElement("div");
     card.className = "popular-card";
-    thumbImg(card, item.poster_url, item.title);
 
-    if (item.rating) {
-      const rating = document.createElement("span");
-      rating.className = "popular-card-rating";
-      rating.textContent = "\u2605 " + item.rating.toFixed(1);
-      card.appendChild(rating);
-    }
+    const media = document.createElement("div");
+    media.className = "popular-card-media";
+    thumbImg(media, item.poster_url, item.title);
+
+    const newEp = document.createElement("span");
+    newEp.className = "new-ep-badge";
+    newEp.textContent = "NEW EP";
+    media.appendChild(newEp);
+    card.appendChild(media);
 
     const titleWrap = document.createElement("div");
     titleWrap.className = "popular-card-title-wrap";
@@ -302,6 +299,20 @@
     title.className = "popular-card-title";
     title.textContent = item.title;
     titleWrap.appendChild(title);
+
+    const metaRow = document.createElement("div");
+    metaRow.className = "popular-card-meta-row";
+    const episode = document.createElement("span");
+    episode.className = "popular-card-episode";
+    episode.textContent = item.episodes ? `${item.episodes} Episodes` : "";
+    metaRow.appendChild(episode);
+    if (item.rating) {
+      const rating = document.createElement("span");
+      rating.className = "popular-card-rating";
+      rating.textContent = "\u2605 " + item.rating.toFixed(1);
+      metaRow.appendChild(rating);
+    }
+    titleWrap.appendChild(metaRow);
     card.appendChild(titleWrap);
 
     card.addEventListener("click", onOpen);
@@ -331,11 +342,6 @@
     const card = document.createElement("div");
     card.className = "featured-card";
     thumbImg(card, item.poster_url, item.title);
-
-    const badge = document.createElement("span");
-    badge.className = "featured-badge";
-    badge.textContent = "POPULAR THIS WEEK";
-    card.appendChild(badge);
 
     const content = document.createElement("div");
     content.className = "featured-content";
@@ -846,16 +852,6 @@
     }, "newsarticle");
   }
 
-  function openNotificationDetail(item) {
-    openDetailSheet({
-      title: "Notification",
-      description: item.caption,
-      genres: [],
-      poster_url: item.image_url,
-      link: item.link,
-    }, "notification");
-  }
-
   // ---------------------------------------------------------------------
   // Set Join Link sheet (admin only)
   // ---------------------------------------------------------------------
@@ -1137,38 +1133,6 @@
     } catch (err) {
       showToast("Couldn't load that genre right now.");
     }
-  }
-
-  // ---------------------------------------------------------------------
-  // Notifications
-  // ---------------------------------------------------------------------
-  async function loadNotifications() {
-    notificationsList.innerHTML = "";
-    let items = [];
-    try {
-      items = await api("/api/notifications");
-    } catch (err) { /* leave empty */ }
-    notificationsEmpty.classList.toggle("hidden", items.length !== 0);
-    items.forEach((item) => {
-      const card = document.createElement("div");
-      card.className = "notification-card";
-      thumbImg(card, item.image_url, "Notification");
-      const body = document.createElement("div");
-      body.className = "notification-body";
-      const caption = document.createElement("p");
-      caption.className = "notification-caption";
-      caption.textContent = item.caption;
-      body.appendChild(caption);
-      const time = document.createElement("span");
-      time.className = "notification-time";
-      time.textContent = new Date(item.created_at * 1000).toLocaleString();
-      body.appendChild(time);
-      card.appendChild(body);
-      card.addEventListener("click", () => openNotificationDetail(item));
-      notificationsList.appendChild(card);
-    });
-    notifBadge.textContent = String(items.length);
-    notifBadge.classList.toggle("hidden", items.length === 0);
   }
 
   // ---------------------------------------------------------------------

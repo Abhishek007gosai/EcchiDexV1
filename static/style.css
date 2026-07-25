@@ -1,16 +1,18 @@
 :root {
-  --bg: #0a0a12;
-  --surface: #15151f;
-  --surface-2: #1c1c28;
-  --border: #2a2a38;
-  --text: #f5f5f7;
-  --text-dim: #a0a0b2;
-  --text-faint: #6b6b7d;
-  --pink: #ec4899;
-  --purple: #7c3aed;
-  --grad: linear-gradient(90deg, var(--pink), var(--purple));
-  --amber: #f5a623;
-  --green: #34d399;
+  --bg: #f4f1e6;
+  --surface: #ffffff;
+  --surface-2: #ece6d4;
+  --border: #ddd5bd;
+  --text: #1b1b16;
+  --text-dim: #5c5847;
+  --text-faint: #8a8570;
+  --pink: #2f6d34;
+  --purple: #16311a;
+  --grad: linear-gradient(90deg, var(--purple), var(--pink));
+  --amber: #e8a317;
+  --green: #2f6d34;
+  --green-dark: #16311a;
+  --hot: #d63f6d;
 }
 
 * { box-sizing: border-box; }
@@ -20,7 +22,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: "JetBrains Mono", "Space Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -34,9 +36,7 @@ html, body {
   min-height: 100dvh;
   max-width: 480px;
   margin: 0 auto;
-  background: radial-gradient(circle at 15% 0%, rgba(124, 58, 237, 0.18), transparent 45%),
-              radial-gradient(circle at 85% 8%, rgba(236, 72, 153, 0.14), transparent 40%),
-              var(--bg);
+  background: var(--bg);
 }
 
 .scroll-area {
@@ -111,9 +111,9 @@ html, body {
 
 .search-input {
   width: 100%;
-  background: var(--surface-2);
-  border: 1px solid var(--purple);
-  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.15);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(27, 27, 22, 0.05);
   border-radius: 999px;
   padding: 12px 16px 12px 40px;
   font-size: 14px;
@@ -122,11 +122,11 @@ html, body {
   font-family: inherit;
 }
 
-.search-input:focus { border-color: var(--pink); }
+.search-input:focus { border-color: var(--green); }
 .search-input::placeholder { color: var(--text-faint); }
 .search-input[readonly] { cursor: pointer; caret-color: transparent; }
 
-/* ---------------- gradient pill tabs (All / Available) ---------------- */
+/* ---------------- pill tabs (All / Available) ---------------- */
 
 .pill-tabs {
   display: flex;
@@ -151,7 +151,7 @@ html, body {
 }
 
 .pill-tab.active {
-  background: var(--grad);
+  background: var(--green-dark);
   color: #fff;
 }
 
@@ -176,14 +176,14 @@ html, body {
   width: 4px;
   height: 16px;
   border-radius: 2px;
-  background: var(--grad);
+  background: var(--green-dark);
   flex: none;
 }
 
 .text-link {
   background: none;
   border: none;
-  color: var(--pink);
+  color: var(--green);
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
@@ -215,7 +215,7 @@ html, body {
   border-radius: 18px;
   overflow: hidden;
   height: 230px;
-  background: #151520;
+  background: var(--green-dark);
   border: 1px solid var(--border);
 }
 
@@ -232,21 +232,7 @@ html, body {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(10,10,18,0.96) 15%, rgba(10,10,18,0.35) 55%, transparent 85%);
-}
-
-.featured-badge {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 2;
-  background: var(--grad);
-  color: #fff;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.6px;
-  padding: 4px 12px;
-  border-radius: 999px;
+  background: linear-gradient(to top, rgba(12,25,13,0.96) 15%, rgba(12,25,13,0.45) 55%, transparent 85%);
 }
 
 .featured-content {
@@ -330,7 +316,7 @@ html, body {
   border: none;
   padding: 0;
 }
-.dot.active { background: var(--pink); width: 16px; border-radius: 3px; }
+.dot.active { background: var(--green); width: 16px; border-radius: 3px; }
 
 /* ---------------- poster card (Trending Now) ---------------- */
 
@@ -356,7 +342,7 @@ html, body {
   position: absolute;
   top: 6px;
   left: 6px;
-  background: var(--grad);
+  background: var(--hot);
   color: #fff;
   font-size: 9px;
   font-weight: 800;
@@ -381,7 +367,7 @@ html, body {
 .poster-meta { padding: 8px 2px 0; }
 
 .poster-title {
-  color: #fff;
+  color: var(--text);
   font-size: 12px;
   font-weight: 700;
   line-height: 1.3;
@@ -393,8 +379,9 @@ html, body {
 }
 
 .poster-genres {
-  color: var(--pink);
+  color: var(--green);
   font-size: 10px;
+  font-weight: 600;
   margin: 0 0 2px;
   white-space: nowrap;
   overflow: hidden;
@@ -534,15 +521,20 @@ html, body {
 .popular-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 16px 12px;
 }
 
 .popular-card {
   position: relative;
+  cursor: pointer;
+  background: transparent;
+}
+
+.popular-card-media {
+  position: relative;
   border-radius: 14px;
   overflow: hidden;
-  aspect-ratio: 2 / 3;
-  cursor: pointer;
+  aspect-ratio: 3 / 4;
   background: var(--surface-2);
   border: 1px solid var(--border);
 }
@@ -556,36 +548,54 @@ html, body {
   object-fit: cover;
 }
 
-.popular-card-rating {
+.new-ep-badge {
   position: absolute;
   top: 8px;
-  right: 8px;
+  left: 8px;
   z-index: 2;
-  background: rgba(10,10,18,0.65);
-  color: var(--amber);
-  font-size: 11px;
+  background: var(--green-dark);
+  color: #fff;
+  font-size: 9px;
   font-weight: 800;
+  letter-spacing: 0.4px;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: 6px;
 }
 
 .popular-card-title-wrap {
-  position: absolute;
-  inset: auto 0 0 0;
-  z-index: 2;
-  padding: 24px 10px 10px;
-  background: linear-gradient(to top, rgba(6,6,12,0.95) 10%, transparent 90%);
+  padding: 8px 2px 0;
 }
 
 .popular-card-title {
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.25;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0 0 4px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.popular-card-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.popular-card-episode {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.popular-card-rating {
+  color: var(--amber);
+  font-size: 10.5px;
+  font-weight: 700;
+  flex: none;
 }
 
 /* ---------------- genre chips (Home) + genre tiles (Search) ---------------- */
@@ -706,12 +716,12 @@ html, body {
   transform: translateX(-50%);
   bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   z-index: 50;
-  width: min(456px, calc(100% - 24px));
+  width: min(380px, calc(100% - 24px));
   padding: 8px;
   border-radius: 999px;
-  background: rgba(21,21,31,0.92);
+  background: rgba(255,255,255,0.94);
   border: 1px solid var(--border);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  box-shadow: 0 10px 30px rgba(27,27,22,0.12);
   backdrop-filter: blur(10px);
 }
 
@@ -726,7 +736,7 @@ html, body {
   border-radius: 999px;
   border: none;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-dim);
   cursor: pointer;
   font-family: inherit;
 }
@@ -735,30 +745,13 @@ html, body {
 .nav-label { font-size: 9.5px; font-weight: 700; }
 
 .nav-btn.active {
-  background: var(--grad);
+  background: var(--green-dark);
   color: #fff;
 }
 
-.notif-badge {
-  position: absolute;
-  top: 2px;
-  right: 14px;
-  background: var(--grad);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 800;
-  min-width: 15px;
-  height: 15px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 3px;
-}
+/* ---------------- sub-views (Search / Genre / Profile) ---------------- */
 
-/* ---------------- sub-views (Search / Genre / Notifications / Profile) ---------------- */
-
-#search-view, #genre-view, #notifications-view, #profile-view {
+#search-view, #genre-view, #profile-view {
   min-height: 100dvh;
   max-width: 480px;
   margin: 0 auto;
@@ -831,36 +824,6 @@ html, body {
 .popular-search-icon { color: var(--pink); font-size: 13px; }
 .popular-search-text { flex: 1; font-size: 13.5px; }
 .popular-search-arrow { color: var(--text-faint); font-size: 13px; }
-
-/* ---------------- Notifications ---------------- */
-
-.notification-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
-  margin-bottom: 14px;
-  cursor: pointer;
-}
-
-.notification-card img,
-.notification-card .generated-thumb {
-  width: 100%;
-  height: 140px;
-  object-fit: cover;
-  display: block;
-}
-
-.notification-body { padding: 12px 14px; }
-
-.notification-caption {
-  font-size: 13px;
-  color: var(--text);
-  margin: 0 0 6px;
-  line-height: 1.4;
-}
-
-.notification-time { font-size: 10.5px; color: var(--text-faint); }
 
 /* ---------------- profile ---------------- */
 
@@ -1099,9 +1062,9 @@ html, body {
 .genre-pill {
   flex: none;
   white-space: nowrap;
-  border: 1px solid var(--purple);
-  color: var(--pink);
-  background: rgba(124, 58, 237, 0.10);
+  border: 1px solid var(--green);
+  color: var(--green);
+  background: rgba(47, 109, 52, 0.08);
   border-radius: 999px;
   padding: 4px 12px;
   font-size: 12px;
@@ -1224,9 +1187,9 @@ html, body {
 }
 
 .reason-btn.selected {
-  border-color: var(--pink);
-  color: var(--pink);
-  background: rgba(236, 72, 153, 0.08);
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(47, 109, 52, 0.08);
 }
 
 .report-textarea {
