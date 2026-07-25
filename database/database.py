@@ -27,6 +27,7 @@ ads_col = _db["ads"]
 searches_col = _db["searches"]
 notifications_col = _db["notifications"]
 counters_col = _db["counters"]
+settings_col = _db["settings"]
 
 
 def init_db():
@@ -369,3 +370,37 @@ def list_notifications(limit: int = 30) -> list[dict]:
         item["id"] = item.pop("_id")
         out.append(item)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Featured carousel — admin-curated ordering of AniList ids. Falls back to
+# "Popular this week" (caller supplies that list) whenever no order has
+# been saved yet.
+# ---------------------------------------------------------------------------
+
+def get_featured_order() -> list[int]:
+    doc = settings_col.find_one({"_id": "featured_order"})
+    return (doc or {}).get("ids", [])
+
+
+def set_featured_order(ids: list[int]) -> None:
+    settings_col.update_one(
+        {"_id": "featured_order"},
+        {"$set": {"ids": ids}},
+        upsert=True,
+    )
+
+
+def move_featured(anilist_id: int, direction: str, fallback_ids: list[int]) -> list[int]:
+    """Nudge one entry left/right within the featured order. If no custom
+    order exists yet, it's seeded from fallback_ids (the current Popular
+    list) first, so the very first reorder starts from what's on screen."""
+    ids = get_featured_order() or list(fallback_ids)
+    if anilist_id not in ids:
+        ids = [anilist_id] + [i for i in ids if i != anilist_id]
+    idx = ids.index(anilist_id)
+    swap_with = idx - 1 if direction == "left" else idx + 1
+    if 0 <= swap_with < len(ids):
+        ids[idx], ids[swap_with] = ids[swap_with], ids[idx]
+    set_featured_order(ids)
+    return ids
