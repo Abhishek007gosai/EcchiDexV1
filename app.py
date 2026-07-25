@@ -23,6 +23,7 @@ import json
 import re
 import secrets
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl, quote
 
 import requests
@@ -983,6 +984,39 @@ def api_popular():
         return jsonify({"results": [], "has_next": False})
 
 
+@app.get("/api/catalog/featured")
+def api_featured():
+    try:
+        weekly = SOURCES["anilist"].get_trending(1)["results"]
+    except requests.RequestException:
+        return jsonify([])
+
+    by_id = {item["anilist_id"]: item for item in weekly}
+    order = db.get_featured_order()
+    ordered = [by_id[i] for i in order if i in by_id]
+    ordered += [item for item in weekly if item["anilist_id"] not in {o["anilist_id"] for o in ordered}]
+    return jsonify(ordered[:10])
+
+
+@app.post("/api/catalog/featured/move")
+def api_featured_move():
+    user = current_user()
+    if not is_admin(user):
+        abort(403)
+    payload = request.get_json(force=True, silent=True) or {}
+    anilist_id = payload.get("anilist_id")
+    direction = payload.get("direction")
+    if not anilist_id or direction not in ("left", "right"):
+        return jsonify(error="anilist_id and direction (left/right) are required"), 400
+    try:
+        weekly = SOURCES["anilist"].get_trending(1)["results"]
+    except requests.RequestException:
+        weekly = []
+    fallback_ids = [item["anilist_id"] for item in weekly]
+    new_order = db.move_featured(int(anilist_id), direction, fallback_ids)
+    return jsonify(ids=new_order)
+
+
 @app.get("/api/news/latest")
 def api_news_latest():
     limit = request.args.get("limit", 10, type=int)
@@ -1016,16 +1050,44 @@ def api_search_clear():
     return jsonify(status="cleared")
 
 
+_genre_thumbs_cache: dict = {"at": 0, "data": None}
+
+
 @app.get("/api/genres")
 def api_genres():
-    out = []
-    for g in GENRES:
+    now = time.time()
+    cached = _genre_thumbs_cache
+    if cached["data"] and now - cached["at"] < Config.CATALOG_CACHE_TTL:
+        return jsonify(cached["data"])
+
+    def fetch_one(g):
         try:
-            thumb = SOURCES["anilist"].get_genre_thumbnail(g)
+            return {"genre": g, "thumbnail": SOURCES["anilist"].get_genre_thumbnail(g)}
         except requests.RequestException:
-            thumb = None
-        out.append({"genre": g, "thumbnail": thumb})
+            return {"genre": g, "thumbnail": None}
+
+    with ThreadPoolExecutor(max_workers=len(GENRES)) as pool:
+        out = list(pool.map(fetch_one, GENRES))
+    out.sort(key=lambda item: GENRES.index(item["genre"]))
+
+    # Only cache a full, successful result — a partial failure should retry
+    # on the next request rather than sticking around for CATALOG_CACHE_TTL.
+    if all(item["thumbnail"] for item in out):
+        _genre_thumbs_cache["at"] = now
+        _genre_thumbs_cache["data"] = out
     return jsonify(out)
+
+
+@app.get("/api/search/anime")
+def api_search_anime():
+    q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", 1, type=int)
+    if not q:
+        return jsonify({"results": [], "has_next": False})
+    try:
+        return jsonify(SOURCES["anilist"].search(q, page))
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
 
 
 @app.get("/api/genres/<genre>")
