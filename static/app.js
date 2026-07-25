@@ -106,7 +106,7 @@
   const searchResultsEmpty = el("search-results-empty");
   const searchLanding = el("search-landing");
   const popularSearchList = el("popular-search-list");
-  const popularSearchClear = el("popular-search-clear");
+  const popularSearchRefresh = el("popular-search-refresh");
   const recentSearchSection = el("recent-search-section");
   const recentSearchList = el("recent-search-list");
   const recentSearchClear = el("recent-search-clear");
@@ -122,6 +122,8 @@
   const trendingRow = el("trending-row");
   const topAiringList = el("top-airing-list");
   const popularLoadMore = el("popular-load-more");
+  const popularGridList = el("popular-grid-list");
+  const popularGridLoadMoreBtn = el("popular-grid-load-more");
 
   const letterBar = el("letter-bar");
   const availableGroups = el("available-groups");
@@ -167,6 +169,10 @@
   let popular = [];
   let popularPage = 1;
   let popularHasNext = false;
+  let mostPopular = [];
+  let mostPopularPage = 1;
+  let mostPopularHasNext = false;
+  let mostPopularLoading = false;
   let available = [];
   let activeAd = null;
   let activeLetter = null;
@@ -243,6 +249,18 @@
   }
 
   function trendingCard(item, onOpen) {
+    return posterScrollCard(item, onOpen, "HOT", "hot-badge");
+  }
+
+  function topAiringCard(item, onOpen) {
+    return posterScrollCard(item, onOpen, "NEW EP", "new-ep-badge");
+  }
+
+  function popularGridCard(item, onOpen) {
+    return posterScrollCard(item, onOpen, "POPULAR", "popular-badge");
+  }
+
+  function posterScrollCard(item, onOpen, badgeText, badgeClass) {
     const card = document.createElement("div");
     card.className = "poster-card";
 
@@ -252,10 +270,12 @@
     img.alt = item.title;
     card.appendChild(img);
 
-    const hot = document.createElement("span");
-    hot.className = "hot-badge";
-    hot.textContent = "HOT";
-    card.appendChild(hot);
+    if (badgeText) {
+      const badge = document.createElement("span");
+      badge.className = badgeClass;
+      badge.textContent = badgeText;
+      card.appendChild(badge);
+    }
 
     if (item.rating) {
       const rating = document.createElement("span");
@@ -288,46 +308,6 @@
     return card;
   }
 
-  function popularGridCard(item, onOpen) {
-    const card = document.createElement("div");
-    card.className = "popular-card";
-
-    const media = document.createElement("div");
-    media.className = "popular-card-media";
-    thumbImg(media, item.poster_url, item.title);
-
-    const newEp = document.createElement("span");
-    newEp.className = "new-ep-badge";
-    newEp.textContent = "NEW EP";
-    media.appendChild(newEp);
-    card.appendChild(media);
-
-    const titleWrap = document.createElement("div");
-    titleWrap.className = "popular-card-title-wrap";
-    const title = document.createElement("p");
-    title.className = "popular-card-title";
-    title.textContent = item.title;
-    titleWrap.appendChild(title);
-
-    const metaRow = document.createElement("div");
-    metaRow.className = "popular-card-meta-row";
-    const episode = document.createElement("span");
-    episode.className = "popular-card-episode";
-    episode.textContent = item.episodes ? `${item.episodes} Episodes` : "";
-    metaRow.appendChild(episode);
-    if (item.rating) {
-      const rating = document.createElement("span");
-      rating.className = "popular-card-rating";
-      rating.textContent = "\u2605 " + item.rating.toFixed(1);
-      metaRow.appendChild(rating);
-    }
-    titleWrap.appendChild(metaRow);
-    card.appendChild(titleWrap);
-
-    card.addEventListener("click", onOpen);
-    return card;
-  }
-
   function matchesLibraryQuery(title) {
     return !libraryQuery || title.toLowerCase().includes(libraryQuery.toLowerCase());
   }
@@ -351,7 +331,7 @@
     popular.forEach((item) => {
       const matched = byTitle.get(item.title.toLowerCase());
       item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-      topAiringList.appendChild(popularGridCard(item, () => openDiscoverDetail(item)));
+      topAiringList.appendChild(topAiringCard(item, () => openDiscoverDetail(item)));
     });
   }
 
@@ -380,6 +360,38 @@
     const nearBottom = scrollArea.scrollTop + scrollArea.clientHeight > scrollArea.scrollHeight - 400;
     if (nearBottom) loadMorePopular();
   }, 150));
+
+  function renderPopularGrid() {
+    popularGridList.innerHTML = "";
+    const byTitle = availableByTitle();
+    mostPopular.forEach((item) => {
+      const matched = byTitle.get(item.title.toLowerCase());
+      item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
+      popularGridList.appendChild(popularGridCard(item, () => openDiscoverDetail(item)));
+    });
+    popularGridLoadMoreBtn.classList.toggle("hidden", !mostPopularHasNext);
+  }
+
+  async function loadMorePopularGrid() {
+    if (mostPopularLoading || !mostPopularHasNext) return;
+    mostPopularLoading = true;
+    popularGridLoadMoreBtn.disabled = true;
+    popularGridLoadMoreBtn.textContent = "Loading…";
+    try {
+      const data = await api(`/api/catalog/most-popular?page=${mostPopularPage + 1}`);
+      mostPopularPage += 1;
+      mostPopular = mostPopular.concat(data.results);
+      mostPopularHasNext = data.has_next;
+      renderPopularGrid();
+    } catch (err) {
+      showToast("Couldn't load more right now.");
+    }
+    popularGridLoadMoreBtn.disabled = false;
+    popularGridLoadMoreBtn.textContent = "Load more";
+    mostPopularLoading = false;
+  }
+
+  popularGridLoadMoreBtn.addEventListener("click", loadMorePopularGrid);
 
   // ---------------------------------------------------------------------
   // Pill tabs: All (discovery) / Available (posted library)
@@ -507,45 +519,56 @@
   let descriptionExpanded = false;
 
   function openDetailSheet(anime, context) {
+    const prevBannerSrc = currentDetail ? (currentDetail.banner_url || currentDetail.poster_url) : null;
     currentDetail = anime;
     currentContext = context;
     descriptionExpanded = false;
 
     const sheetMedia = detailPoster.parentElement;
-    sheetMedia.querySelectorAll(".generated-thumb").forEach((n) => n.remove());
-    detailPoster.src = "";
-    detailPoster.style.display = "";
     const hasRealBanner = !!anime.banner_url;
     const bannerSrc = anime.banner_url || anime.poster_url;
-    // A true banner is already wide, so a centered cover-crop looks right.
-    // A portrait poster forced into that same short, wide box can't be
-    // cover-cropped without zooming in hard and losing most of the art
-    // (usually landing on a jarring close-up of just the eyes). Instead,
-    // show it uncropped over a blurred version of itself as a backdrop.
-    detailPoster.classList.toggle("poster-fallback", !hasRealBanner);
-    sheetMedia.classList.toggle("has-blur-bg", !hasRealBanner && !!bannerSrc);
-    if (!hasRealBanner && bannerSrc) {
-      sheetMedia.style.setProperty("--banner-img", `url("${bannerSrc}")`);
-    } else {
-      sheetMedia.style.removeProperty("--banner-img");
-    }
-    if (bannerSrc) {
-      detailPoster.src = bannerSrc;
-      detailPoster.onerror = () => {
+
+    // openDiscoverDetail (and friends) call this twice per tap: once
+    // immediately with placeholder data, then again once the full AniList
+    // details resolve. When it's the same artwork both times, skip
+    // re-doing the poster/blurred-backdrop work below — reloading the
+    // image and re-rasterizing the blur filter on every follow-up call is
+    // what made back-to-back opens feel janky, since the browser did that
+    // heavy repaint work even though nothing visually needed to change.
+    if (bannerSrc !== prevBannerSrc) {
+      sheetMedia.querySelectorAll(".generated-thumb").forEach((n) => n.remove());
+      detailPoster.src = "";
+      detailPoster.style.display = "";
+      // A true banner is already wide, so a centered cover-crop looks right.
+      // A portrait poster forced into that same short, wide box can't be
+      // cover-cropped without zooming in hard and losing most of the art
+      // (usually landing on a jarring close-up of just the eyes). Instead,
+      // show it uncropped over a blurred version of itself as a backdrop.
+      detailPoster.classList.toggle("poster-fallback", !hasRealBanner);
+      sheetMedia.classList.toggle("has-blur-bg", !hasRealBanner && !!bannerSrc);
+      if (!hasRealBanner && bannerSrc) {
+        sheetMedia.style.setProperty("--banner-img", `url("${bannerSrc}")`);
+      } else {
+        sheetMedia.style.removeProperty("--banner-img");
+      }
+      if (bannerSrc) {
+        detailPoster.src = bannerSrc;
+        detailPoster.onerror = () => {
+          detailPoster.style.display = "none";
+          sheetMedia.classList.remove("has-blur-bg");
+          const gen = generatedThumb(anime.title);
+          gen.style.position = "absolute";
+          gen.style.inset = "0";
+          gen.style.zIndex = "1";
+          sheetMedia.insertBefore(gen, detailPoster);
+        };
+      } else {
         detailPoster.style.display = "none";
-        sheetMedia.classList.remove("has-blur-bg");
         const gen = generatedThumb(anime.title);
         gen.style.position = "absolute";
         gen.style.inset = "0";
-        gen.style.zIndex = "1";
         sheetMedia.insertBefore(gen, detailPoster);
-      };
-    } else {
-      detailPoster.style.display = "none";
-      const gen = generatedThumb(anime.title);
-      gen.style.position = "absolute";
-      gen.style.inset = "0";
-      sheetMedia.insertBefore(gen, detailPoster);
+      }
     }
 
     detailTitle.textContent = anime.title;
@@ -844,7 +867,6 @@
 
   async function renderPopularSearches() {
     popularSearchList.innerHTML = "";
-    popularSearchClear.classList.toggle("hidden", !(profile && profile.role === "admin"));
     let items = [];
     try {
       items = await api("/api/search/popular?limit=6");
@@ -893,12 +915,15 @@
     }
   });
 
-  popularSearchClear.addEventListener("click", async () => {
+  popularSearchRefresh.addEventListener("click", async () => {
+    popularSearchRefresh.disabled = true;
+    const original = popularSearchRefresh.textContent;
+    popularSearchRefresh.textContent = "Refreshing…";
     try {
-      await api("/api/search/clear", { method: "POST" });
-      renderPopularSearches();
-    } catch (err) {
-      showToast(err.message || "Couldn't clear searches");
+      await renderPopularSearches();
+    } finally {
+      popularSearchRefresh.disabled = false;
+      popularSearchRefresh.textContent = original;
     }
   });
 
@@ -1154,21 +1179,28 @@
   // ---------------------------------------------------------------------
   async function loadDiscover() {
     try {
-      const [trendingData, popularData] = await Promise.all([
+      const [trendingData, popularData, mostPopularData] = await Promise.all([
         api("/api/catalog/trending"),
         api("/api/catalog/popular"),
+        api("/api/catalog/most-popular"),
       ]);
       trending = trendingData.results;
       popular = popularData.results;
       popularHasNext = popularData.has_next;
       popularPage = 1;
+      mostPopular = mostPopularData.results;
+      mostPopularHasNext = mostPopularData.has_next;
+      mostPopularPage = 1;
     } catch (err) {
       trending = [];
       popular = [];
       popularHasNext = false;
+      mostPopular = [];
+      mostPopularHasNext = false;
     }
     renderTrending();
     renderTopAiring();
+    renderPopularGrid();
   }
 
   async function loadAvailable() {
