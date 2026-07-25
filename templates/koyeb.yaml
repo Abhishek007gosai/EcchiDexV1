@@ -1,0 +1,51 @@
+# Reference service definition for Koyeb.
+#
+# Unlike Render, Koyeb does not automatically read a YAML file from your
+# repo when you connect it via GitHub — deployment is configured through
+# the Koyeb dashboard or CLI instead. This file exists so the intended
+# configuration lives in version control; use it as a checklist when
+# setting the service up, or pass the same values as CLI flags:
+#
+#   koyeb deploy . anime-index/web \
+#     --archive-builder docker \
+#     --archive-docker-dockerfile Dockerfile \
+#     --ports 8000:http \
+#     --routes /:8000 \
+#     --env BOT_TOKEN=@bot-token \
+#     --env WEBHOOK_SECRET=@webhook-secret \
+#     --env WEBAPP_URL=https://anime-index-<org>.koyeb.app \
+#     --env LOG_CHANNEL_ID=@log-channel-id \
+#     --env ADMIN_IDS=@admin-ids \
+#     --env SECRET_KEY=@secret-key \
+#     --env MONGODB_URL=@mongodb-url \
+#     --env MONGODB_NAME=anime_index
+#
+# (The @name values are Koyeb Secrets — create them first with
+# `koyeb secret create <name>`. Run `koyeb deploy --help` to confirm the
+# current flag names for your installed CLI version.)
+#
+# Dashboard equivalent: Create Web Service -> GitHub -> select this repo ->
+# Builder: Dockerfile -> Port 8000 -> add the env vars below -> Deploy.
+
+app: anime-index
+service: web
+
+builder: docker
+dockerfile: Dockerfile
+
+port: 8000
+route: /
+
+env:
+  - BOT_TOKEN            # from @BotFather
+  - WEBHOOK_SECRET       # any random string
+  - WEBAPP_URL           # e.g. https://anime-index-<org>.koyeb.app
+  - LOG_CHANNEL_ID       # channel the bot posts requests/reports to
+  - ADMIN_IDS            # comma-separated Telegram user IDs
+  - SECRET_KEY
+  - MONGODB_URL          # connection string, e.g. from MongoDB Atlas
+  - MONGODB_NAME: anime_index
+
+# Storage lives in MongoDB, not on Koyeb's own disk — a hosted option like
+# MongoDB Atlas's free tier works well and survives redeploys, unlike
+# Koyeb's ephemeral instance filesystem.
