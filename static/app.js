@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const brandName = document.body.dataset.brand || "Anime Index";
+  const brandName = document.body.dataset.brand || "Anime Eternals";
 
   // ---------------------------------------------------------------------
   // Telegram WebApp bootstrap (no-ops gracefully outside Telegram)
@@ -117,6 +117,7 @@
   const tabAll = el("tab-all");
   const tabLibrary = el("tab-library");
 
+  const scrollArea = el("scroll-area");
   const featuredSection = el("featured-section");
   const featuredCarousel = el("featured-carousel");
   const featuredDots = el("featured-dots");
@@ -172,7 +173,7 @@
   let popular = [];
   let popularPage = 1;
   let popularHasNext = false;
-  let newsItems = [];
+  let featuredItems = [];
   let available = [];
   let activeAd = null;
   let activeLetter = null;
@@ -283,67 +284,25 @@
     return card;
   }
 
-  function airingCard(item, rank, onOpen) {
+  function popularGridCard(item, onOpen) {
     const card = document.createElement("div");
-    card.className = "airing-card";
+    card.className = "popular-card";
+    thumbImg(card, item.poster_url, item.title);
 
-    const rankBox = document.createElement("div");
-    rankBox.className = "airing-rank";
-    thumbImg(rankBox, item.poster_url, item.title);
-    const rankNum = document.createElement("div");
-    rankNum.className = "airing-rank-number";
-    rankNum.textContent = String(rank).padStart(2, "0");
-    rankBox.appendChild(rankNum);
-    card.appendChild(rankBox);
-
-    const body = document.createElement("div");
-    body.className = "airing-body";
-
-    const topRow = document.createElement("div");
-    topRow.className = "airing-top-row";
-    const left = document.createElement("div");
-    const badge = document.createElement("span");
-    badge.className = "airing-new-ep";
-    badge.textContent = "NEW EP";
-    left.appendChild(badge);
-    const title = document.createElement("p");
-    title.className = "airing-title";
-    title.textContent = item.title;
-    left.appendChild(title);
-    topRow.appendChild(left);
     if (item.rating) {
-      const rating = document.createElement("div");
-      rating.className = "airing-rating";
+      const rating = document.createElement("span");
+      rating.className = "popular-card-rating";
       rating.textContent = "\u2605 " + item.rating.toFixed(1);
-      topRow.appendChild(rating);
-    }
-    body.appendChild(topRow);
-
-    if (item.genres && item.genres.length) {
-      const genreRow = document.createElement("div");
-      genreRow.className = "airing-genres";
-      item.genres.forEach((g) => {
-        const pill = document.createElement("span");
-        pill.className = "airing-genre-pill";
-        pill.textContent = g;
-        genreRow.appendChild(pill);
-      });
-      body.appendChild(genreRow);
+      card.appendChild(rating);
     }
 
-    if (item.synopsis) {
-      const syn = document.createElement("p");
-      syn.className = "airing-synopsis";
-      syn.textContent = item.synopsis;
-      body.appendChild(syn);
-    }
-
-    card.appendChild(body);
-
-    const arrow = document.createElement("span");
-    arrow.className = "airing-arrow";
-    arrow.textContent = "\u2197";
-    card.appendChild(arrow);
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "popular-card-title-wrap";
+    const title = document.createElement("p");
+    title.className = "popular-card-title";
+    title.textContent = item.title;
+    titleWrap.appendChild(title);
+    card.appendChild(titleWrap);
 
     card.addEventListener("click", onOpen);
     return card;
@@ -354,25 +313,28 @@
   }
 
   // ---------------------------------------------------------------------
-  // Featured carousel (Anime News items, styled as a promo banner)
+  // Featured carousel — "Popular this week" anime, admin-reorderable.
   // ---------------------------------------------------------------------
   function renderFeatured() {
     featuredCarousel.innerHTML = "";
     featuredDots.innerHTML = "";
-    if (!newsItems.length) {
+    if (!featuredItems.length) {
       featuredSection.classList.add("hidden");
       return;
     }
     featuredSection.classList.remove("hidden");
-    const item = newsItems[featuredIndex % newsItems.length];
+    const item = featuredItems[featuredIndex % featuredItems.length];
+    const byTitle = availableByTitle();
+    const matched = byTitle.get(item.title.toLowerCase());
+    item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
 
     const card = document.createElement("div");
     card.className = "featured-card";
-    thumbImg(card, item.image, item.title);
+    thumbImg(card, item.poster_url, item.title);
 
     const badge = document.createElement("span");
     badge.className = "featured-badge";
-    badge.textContent = "FEATURED";
+    badge.textContent = "POPULAR THIS WEEK";
     card.appendChild(badge);
 
     const content = document.createElement("div");
@@ -381,48 +343,69 @@
     title.className = "featured-title";
     title.textContent = item.title;
     content.appendChild(title);
-    const desc = document.createElement("p");
-    desc.className = "featured-desc";
-    desc.textContent = item.summary || "";
-    content.appendChild(desc);
+    if (item.genres && item.genres.length) {
+      const desc = document.createElement("p");
+      desc.className = "featured-desc";
+      desc.textContent = item.genres.join(" \u00b7 ");
+      content.appendChild(desc);
+    }
 
     const actions = document.createElement("div");
     actions.className = "featured-actions";
-    const watchBtn = document.createElement("button");
-    watchBtn.className = "watch-now-btn";
-    watchBtn.textContent = "\u25b6 Watch Now";
-    watchBtn.addEventListener("click", (e) => {
+    const detailsBtn = document.createElement("button");
+    detailsBtn.className = "btn btn-secondary featured-details-btn";
+    detailsBtn.textContent = "Details";
+    detailsBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (tg && tg.openLink) tg.openLink(item.link);
-      else window.open(item.link, "_blank");
+      openDiscoverDetail(item);
     });
-    actions.appendChild(watchBtn);
-    const plusBtn = document.createElement("button");
-    plusBtn.className = "featured-plus-btn";
-    plusBtn.textContent = "+";
-    plusBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openNewsArticleDetail(item);
-    });
-    actions.appendChild(plusBtn);
+    actions.appendChild(detailsBtn);
+
+    if (profile && profile.role === "admin") {
+      const moveLeft = document.createElement("button");
+      moveLeft.className = "featured-move-btn";
+      moveLeft.textContent = "\u2039";
+      moveLeft.setAttribute("aria-label", "Move earlier");
+      moveLeft.addEventListener("click", (e) => { e.stopPropagation(); moveFeatured(item, "left"); });
+      actions.appendChild(moveLeft);
+
+      const moveRight = document.createElement("button");
+      moveRight.className = "featured-move-btn";
+      moveRight.textContent = "\u203a";
+      moveRight.setAttribute("aria-label", "Move later");
+      moveRight.addEventListener("click", (e) => { e.stopPropagation(); moveFeatured(item, "right"); });
+      actions.appendChild(moveRight);
+    }
     content.appendChild(actions);
     card.appendChild(content);
 
-    card.addEventListener("click", () => openNewsArticleDetail(item));
+    card.addEventListener("click", () => openDiscoverDetail(item));
     featuredCarousel.appendChild(card);
 
-    newsItems.forEach((_, i) => {
+    featuredItems.forEach((_, i) => {
       const dot = document.createElement("button");
-      dot.className = "dot" + (i === featuredIndex % newsItems.length ? " active" : "");
+      dot.className = "dot" + (i === featuredIndex % featuredItems.length ? " active" : "");
       dot.addEventListener("click", () => { featuredIndex = i; renderFeatured(); resetFeaturedAutoplay(); });
       featuredDots.appendChild(dot);
     });
   }
 
+  async function moveFeatured(item, direction) {
+    try {
+      await api("/api/catalog/featured/move", {
+        method: "POST",
+        body: JSON.stringify({ anilist_id: item.anilist_id, direction }),
+      });
+      await loadFeatured();
+    } catch (err) {
+      showToast(err.message || "Couldn't reorder right now.");
+    }
+  }
+
   function startFeaturedAutoplay() {
-    if (featuredTimer || newsItems.length < 2) return;
+    if (featuredTimer || featuredItems.length < 2) return;
     featuredTimer = setInterval(() => {
-      featuredIndex = (featuredIndex + 1) % newsItems.length;
+      featuredIndex = (featuredIndex + 1) % featuredItems.length;
       renderFeatured();
     }, 6000);
   }
@@ -447,17 +430,18 @@
   function renderTopAiring() {
     topAiringList.innerHTML = "";
     const byTitle = availableByTitle();
-    popular.forEach((item, i) => {
+    popular.forEach((item) => {
       const matched = byTitle.get(item.title.toLowerCase());
       item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-      topAiringList.appendChild(airingCard(item, i + 1, () => openDiscoverDetail(item)));
+      topAiringList.appendChild(popularGridCard(item, () => openDiscoverDetail(item)));
     });
-    popularLoadMore.classList.toggle("hidden", !popularHasNext);
   }
 
-  popularLoadMore.addEventListener("click", async () => {
-    popularLoadMore.textContent = "Loading...";
-    popularLoadMore.disabled = true;
+  let popularLoading = false;
+  async function loadMorePopular() {
+    if (popularLoading || !popularHasNext) return;
+    popularLoading = true;
+    popularLoadMore.classList.remove("hidden");
     try {
       const data = await api(`/api/catalog/popular?page=${popularPage + 1}`);
       popularPage += 1;
@@ -467,9 +451,17 @@
     } catch (err) {
       showToast("Couldn't load more right now.");
     }
-    popularLoadMore.textContent = "Load more";
-    popularLoadMore.disabled = false;
-  });
+    popularLoadMore.classList.add("hidden");
+    popularLoading = false;
+  }
+
+  // Auto-load more Popular anime as the Home tab is scrolled, instead of
+  // making the user tap a button.
+  scrollArea.addEventListener("scroll", debounce(() => {
+    if (tabAll.classList.contains("hidden")) return;
+    const nearBottom = scrollArea.scrollTop + scrollArea.clientHeight > scrollArea.scrollHeight - 400;
+    if (nearBottom) loadMorePopular();
+  }, 150));
 
   function renderGenreChips() {
     genreChipRow.innerHTML = "";
@@ -612,23 +604,45 @@
     currentContext = context;
     descriptionExpanded = false;
 
+    const sheetMedia = detailPoster.parentElement;
+    sheetMedia.querySelectorAll(".generated-thumb").forEach((n) => n.remove());
     detailPoster.src = "";
     detailPoster.style.display = "";
     const bannerSrc = anime.banner_url || anime.poster_url;
     if (bannerSrc) {
       detailPoster.src = bannerSrc;
-      detailPoster.onerror = () => { detailPoster.style.display = "none"; };
+      detailPoster.onerror = () => {
+        detailPoster.style.display = "none";
+        const gen = generatedThumb(anime.title);
+        gen.style.position = "absolute";
+        gen.style.inset = "0";
+        sheetMedia.insertBefore(gen, detailPoster);
+      };
     } else {
       detailPoster.style.display = "none";
+      const gen = generatedThumb(anime.title);
+      gen.style.position = "absolute";
+      gen.style.inset = "0";
+      sheetMedia.insertBefore(gen, detailPoster);
     }
 
-    // Overlapping thumbnail only makes sense when we have a distinct
-    // poster separate from the banner (anime posts) — hide it for
-    // single-image contexts (news articles, ads).
-    if (anime.poster_url && anime.banner_url && anime.poster_url !== anime.banner_url) {
+    // The small overlapping poster thumbnail is shown for any real anime
+    // post (available / news / genre contexts) as long as we have a poster
+    // image at all — it doesn't need to differ from the banner. It's only
+    // hidden for single-image contexts (news articles, ads, notifications)
+    // where there's nothing distinct to overlap.
+    const showThumb = ["available", "news", "genre"].includes(context) && !!anime.poster_url;
+    if (showThumb) {
       detailThumb.src = anime.poster_url;
+      detailThumb.style.display = "";
       detailThumb.classList.remove("hidden");
-      detailThumb.onerror = () => detailThumb.classList.add("hidden");
+      detailThumb.onerror = () => {
+        detailThumb.style.display = "none";
+        const gen = generatedThumb(anime.title);
+        gen.className = "detail-thumb generated-thumb";
+        detailThumb.insertAdjacentElement("afterend", gen);
+        detailThumb.classList.add("hidden");
+      };
     } else {
       detailThumb.classList.add("hidden");
     }
@@ -693,7 +707,7 @@
 
   function renderDetailAction(anime, context) {
     detailActionArea.innerHTML = "";
-    reportOpenBtn.classList.toggle("hidden", context !== "available");
+    reportOpenBtn.classList.toggle("hidden", !["available", "news", "genre"].includes(context));
 
     if (context === "newsarticle") {
       const readBtn = document.createElement("button");
@@ -774,18 +788,18 @@
   function renderVoteButton(anime) {
     const btn = document.createElement("button");
     btn.className = "btn btn-primary";
-    btn.textContent = "\U0001f5f3 Vote";
+    btn.textContent = "Request Anime";
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       try {
         const result = await api("/api/vote", { method: "POST", body: JSON.stringify({ title: anime.title }) });
         btn.textContent = result.already_voted
-          ? `\u2713 Already voted (${result.count})`
-          : `\u2713 Voted (${result.count})`;
-        showToast(result.already_voted ? "You already voted for this." : "Vote counted!");
+          ? `\u2713 Already requested (${result.count})`
+          : `\u2713 Requested (${result.count})`;
+        showToast(result.already_voted ? "You already requested this." : "Request sent!");
       } catch (err) {
         btn.disabled = false;
-        showToast(err.message || "Couldn't vote right now.");
+        showToast(err.message || "Couldn't send request right now.");
       }
     });
     detailActionArea.appendChild(btn);
@@ -960,14 +974,9 @@
     }
   });
 
-  async function renderGenreTiles() {
+  function renderGenreTiles() {
     genreTileGrid.innerHTML = "";
-    if (!Object.keys(genreThumbs).length) {
-      try {
-        const data = await api("/api/genres");
-        data.forEach((g) => { genreThumbs[g.genre] = g.thumbnail; });
-      } catch (err) { /* fall back to generated thumbs below */ }
-    }
+    const tileByGenre = {};
     GENRES.forEach((g) => {
       const tile = document.createElement("div");
       tile.className = "genre-tile";
@@ -978,36 +987,134 @@
       tile.appendChild(label);
       tile.addEventListener("click", () => openGenreView(g));
       genreTileGrid.appendChild(tile);
+      tileByGenre[g] = tile;
     });
+
+    if (Object.keys(genreThumbs).length) return; // already fetched this session
+
+    api("/api/genres").then((data) => {
+      data.forEach((g) => {
+        genreThumbs[g.genre] = g.thumbnail;
+        if (!g.thumbnail) return;
+        const tile = tileByGenre[g.genre];
+        if (!tile) return;
+        tile.querySelectorAll("img, .generated-thumb").forEach((n) => n.remove());
+        thumbImg(tile, g.thumbnail, g.genre);
+      });
+    }).catch(() => { /* placeholders stay as-is */ });
   }
 
   const trackSearch = debounce((q) => {
     api("/api/search/track", { method: "POST", body: JSON.stringify({ query: q }) }).catch(() => {});
   }, 600);
 
-  function runLibrarySearch(q, track = true) {
+  let searchQuery = "";
+  let searchPage = 1;
+  let searchHasNext = false;
+  let searchLoading = false;
+  let searchToken = 0;
+
+  function searchResultRow(item, onOpen) {
+    const row = document.createElement("div");
+    row.className = "search-result-row";
+    thumbImg(row, item.poster_url, item.title);
+    const body = document.createElement("div");
+    body.className = "search-result-body";
+    const title = document.createElement("p");
+    title.className = "search-result-title";
+    title.textContent = item.title;
+    body.appendChild(title);
+    const meta = document.createElement("div");
+    meta.className = "search-result-meta";
+    if (item.year) {
+      const year = document.createElement("span");
+      year.className = "search-result-year";
+      year.textContent = item.year;
+      meta.appendChild(year);
+    }
+    if (item.rating) {
+      const rating = document.createElement("span");
+      rating.className = "search-result-rating";
+      rating.textContent = "\u2605 " + item.rating.toFixed(1);
+      meta.appendChild(rating);
+    }
+    body.appendChild(meta);
+    if (item.genres && item.genres.length) {
+      const genres = document.createElement("p");
+      genres.className = "search-result-genres";
+      genres.textContent = item.genres.join(", ");
+      body.appendChild(genres);
+    }
+    row.appendChild(body);
+    row.addEventListener("click", onOpen);
+    return row;
+  }
+
+  async function runLibrarySearch(q, track = true) {
     const query = q.trim();
     if (!query) { renderSearchLanding(); return; }
+    searchQuery = query;
+    searchPage = 1;
+    searchHasNext = false;
     searchLanding.classList.add("hidden");
     searchResults.classList.remove("hidden");
-    const matches = available.filter((a) => a.title.toLowerCase().includes(query.toLowerCase()));
     searchResultsGroups.innerHTML = "";
-    searchResultsEmpty.classList.toggle("hidden", matches.length !== 0);
-    matches.forEach((item) => {
-      const row = document.createElement("div");
-      row.className = "search-result-row";
-      thumbImg(row, item.poster_url, item.title);
-      const title = document.createElement("span");
-      title.className = "search-result-title";
-      title.textContent = item.title;
-      row.appendChild(title);
-      row.addEventListener("click", () => openLocalDetail(item));
-      searchResultsGroups.appendChild(row);
+    searchResultsEmpty.classList.add("hidden");
+
+    const byTitle = availableByTitle();
+    const localMatches = available.filter((a) => a.title.toLowerCase().includes(query.toLowerCase()));
+    localMatches.forEach((item) => {
+      searchResultsGroups.appendChild(searchResultRow(item, () => openLocalDetail(item)));
     });
+
+    const myToken = ++searchToken;
+    searchLoading = true;
+    try {
+      const data = await api(`/api/search/anime?q=${encodeURIComponent(query)}&page=1`);
+      if (myToken !== searchToken) return; // a newer search superseded this one
+      searchHasNext = data.has_next;
+      const localTitles = new Set(localMatches.map((a) => a.title.toLowerCase()));
+      data.results.forEach((item) => {
+        if (localTitles.has(item.title.toLowerCase())) return; // already shown above
+        const matched = byTitle.get(item.title.toLowerCase());
+        item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
+        searchResultsGroups.appendChild(searchResultRow(item, () => openDiscoverDetail(item)));
+      });
+      searchResultsEmpty.classList.toggle("hidden", searchResultsGroups.children.length !== 0);
+    } catch (err) {
+      searchResultsEmpty.classList.toggle("hidden", searchResultsGroups.children.length !== 0);
+    }
+    searchLoading = false;
     if (track) trackSearch(query);
   }
 
-  searchViewInput.addEventListener("input", (e) => runLibrarySearch(e.target.value));
+  async function loadMoreSearchResults() {
+    if (searchLoading || !searchHasNext || !searchQuery) return;
+    searchLoading = true;
+    const myToken = searchToken;
+    try {
+      const data = await api(`/api/search/anime?q=${encodeURIComponent(searchQuery)}&page=${searchPage + 1}`);
+      if (myToken !== searchToken) return;
+      searchPage += 1;
+      searchHasNext = data.has_next;
+      const byTitle = availableByTitle();
+      data.results.forEach((item) => {
+        const matched = byTitle.get(item.title.toLowerCase());
+        item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
+        searchResultsGroups.appendChild(searchResultRow(item, () => openDiscoverDetail(item)));
+      });
+    } catch (err) { /* stop silently, user can keep scrolling to retry */ }
+    searchLoading = false;
+  }
+
+  searchViewInput.addEventListener("input", debounce((e) => runLibrarySearch(e.target.value), 350));
+
+  // Infinite scroll: the Search subview scrolls the document itself.
+  window.addEventListener("scroll", debounce(() => {
+    if (searchView.classList.contains("hidden") || searchResults.classList.contains("hidden")) return;
+    const nearBottom = window.scrollY + window.innerHeight > document.documentElement.scrollHeight - 400;
+    if (nearBottom) loadMoreSearchResults();
+  }, 150));
 
   function escapeHtml(str) {
     const div = document.createElement("div");
@@ -1116,11 +1223,11 @@
     renderTopAiring();
   }
 
-  async function loadAnimeNews() {
+  async function loadFeatured() {
     try {
-      newsItems = await api("/api/news/latest?limit=10");
+      featuredItems = await api("/api/catalog/featured");
     } catch (err) {
-      newsItems = [];
+      featuredItems = [];
     }
     featuredIndex = 0;
     renderFeatured();
@@ -1176,7 +1283,8 @@
   (async function init() {
     document.title = brandName;
     renderGenreChips();
-    await Promise.all([loadNews(), loadAvailable(), loadAnimeNews(), loadAd(), preloadProfile()]);
+    await Promise.all([loadNews(), loadAvailable(), loadFeatured(), loadAd(), preloadProfile()]);
+    renderFeatured();
     applyDeepLink();
   })();
 })();
