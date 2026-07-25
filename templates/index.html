@@ -31,7 +31,13 @@
 
 
 
-      <!-- "All" tab: Trending + Top Airing -->
+      <!-- All / Available tabs -->
+      <div class="pill-tabs" id="home-tabs" role="tablist" aria-label="Anime sections">
+        <button class="pill-tab active" id="tab-all-btn" type="button" role="tab" aria-selected="true">All</button>
+        <button class="pill-tab" id="tab-available-btn" type="button" role="tab" aria-selected="false">Available</button>
+      </div>
+
+      <!-- "All" tab: Trending + Top Airing + Popular -->
       <div id="tab-all">
         <section>
           <div class="section-header-row">
@@ -55,6 +61,10 @@
           <div id="popular-grid-list" class="popular-grid"></div>
           <button id="popular-grid-load-more" class="load-more-btn">Load more</button>
         </section>
+      </div>
+
+      <!-- "Available" tab: only anime with a Join Link -->
+      <div id="tab-available" class="hidden">
         <section id="available-section">
           <div id="ad-slot" class="hidden"></div>
           <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available Anime</h2>
