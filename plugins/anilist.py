@@ -236,6 +236,11 @@ class AniListSource(AnimeSource):
         # currently releasing, not just anime that is popular overall.
         return self._discover("POPULARITY_DESC", page, query=DISCOVER_AIRING_QUERY, cache_prefix="airing:")
 
+    def get_most_popular(self, page: int = 1) -> dict:
+        # Backs the "Popular" section — most popular anime overall,
+        # regardless of airing status (unlike get_popular/"Top Airing").
+        return self._discover("POPULARITY_DESC", page, cache_prefix="popular-all:")
+
     def browse_genre(self, genre: str, page: int = 1) -> dict:
         def fetch():
             data = self._post(GENRE_QUERY, {"genre": genre, "page": page})
