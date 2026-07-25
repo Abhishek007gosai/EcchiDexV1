@@ -38,14 +38,14 @@
       <div id="tab-all">
         <section>
           <div class="section-header-row">
-            <h2 class="section-header"><span class="accent-bar"></span>Trending Now</h2>
+            <h2 class="section-header section-header--trending"><span class="accent-bar"></span>Trending Now</h2>
           </div>
           <div id="trending-row" class="hscroll"></div>
         </section>
 
         <section>
           <div class="section-header-row">
-            <h2 class="section-header"><span class="accent-bar"></span>Top Airing</h2>
+            <h2 class="section-header section-header--airing"><span class="accent-bar"></span>Top Airing</h2>
           </div>
           <div id="top-airing-list" class="popular-grid"></div>
           <p id="popular-load-more" class="search-loading-more hidden">Loading more…</p>
@@ -55,7 +55,7 @@
       <!-- "Available" tab: your posted library, browsable A–Z -->
       <div id="tab-library" class="hidden">
         <div id="ad-slot" class="hidden"></div>
-        <h2 class="section-header"><span class="accent-bar"></span>Available Anime</h2>
+        <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available Anime</h2>
         <div id="letter-bar" class="letter-bar"></div>
         <div id="available-groups"></div>
         <p id="available-empty" class="empty-note hidden">No anime found.</p>
@@ -81,13 +81,21 @@
     </div>
 
     <div id="search-landing">
+      <div id="recent-search-section" class="hidden">
+        <div class="section-header-row">
+          <h2 class="section-header section-header--recent"><span class="accent-bar"></span>Recent Searches</h2>
+          <button id="recent-search-clear" class="text-link">Clear All</button>
+        </div>
+        <div id="recent-search-list"></div>
+      </div>
+
       <div class="section-header-row">
-        <h2 class="section-header"><span class="accent-bar"></span>Popular Searches</h2>
+        <h2 class="section-header section-header--popular"><span class="accent-bar"></span>Popular Searches</h2>
         <button id="popular-search-clear" class="text-link hidden">Clear All</button>
       </div>
       <div id="popular-search-list"></div>
 
-      <h2 class="section-header"><span class="accent-bar"></span>Genres</h2>
+      <h2 class="section-header section-header--genres"><span class="accent-bar"></span>Genres</h2>
       <div id="genre-tile-grid" class="genre-tile-grid"></div>
     </div>
   </section>
@@ -163,7 +171,7 @@
       <div class="sheet-body">
         <h3 class="sheet-title">Set Join Link</h3>
         <input id="link-input" class="edit-link-input link-input-full" type="text"
-               placeholder="Channel ID, @username, or URL" autocomplete="off" />
+               placeholder="Join URL" autocomplete="off" />
         <div class="btn-row">
           <button id="link-cancel" class="btn btn-secondary">Cancel</button>
           <button id="link-save" class="btn btn-primary">Save</button>
