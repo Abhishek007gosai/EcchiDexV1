@@ -639,7 +639,7 @@ async def handle_editdone(q, sid):
     keyboard = InlineKeyboardMarkup([[_preview_button(session["anime_id"])]])
     text = f"\u2705 Join link updated for {session['title']}."
     if propagated:
-        text += f"\nAlso applied to {propagated} related season(s)."
+        text += f"\nAlso applied to {propagated} related title(s)."
     await q.edit_message_text(text, reply_markup=keyboard)
 
 
@@ -719,7 +719,7 @@ async def handle_pending_link_text(update: Update, pending: dict):
         keyboard = InlineKeyboardMarkup([[_preview_button(pending["anime_id"])]])
         text = f"\u2705 Join link saved for {pending['title']}."
         if propagated:
-            text += f"\nAlso applied to {propagated} related season(s)."
+            text += f"\nAlso applied to {propagated} related title(s)."
         await update.message.reply_text(text, reply_markup=keyboard)
         return
 
