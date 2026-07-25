@@ -103,13 +103,27 @@ class AniListSource(AnimeSource):
         self._cache: dict[str, tuple[float, dict]] = {}
 
     def _post(self, query: str, variables: dict) -> dict:
-        resp = requests.post(
-            Config.ANILIST_ENDPOINT,
-            json={"query": query, "variables": variables},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return resp.json()["data"]
+        # AniList's public API rate-limits aggressively. When several
+        # requests land in the same burst (e.g. fetching all genre
+        # thumbnails in parallel), a few commonly come back 429. Retry
+        # those with a short backoff instead of surfacing a failure for
+        # what's really just "try again in a moment".
+        last_exc = None
+        for attempt in range(3):
+            resp = requests.post(
+                Config.ANILIST_ENDPOINT,
+                json={"query": query, "variables": variables},
+                timeout=10,
+            )
+            if resp.status_code == 429:
+                last_exc = requests.HTTPError(f"429 rate limited (attempt {attempt + 1})", response=resp)
+                retry_after = resp.headers.get("Retry-After")
+                delay = float(retry_after) if retry_after else 0.6 * (attempt + 1)
+                time.sleep(delay)
+                continue
+            resp.raise_for_status()
+            return resp.json()["data"]
+        raise last_exc
 
     def search(self, query: str, page: int = 1) -> dict:
         data = self._post(SEARCH_QUERY, {"search": query, "page": page})
