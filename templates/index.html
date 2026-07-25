@@ -29,15 +29,12 @@
         <input id="search-input" class="search-input" type="text" placeholder="Search anime..." autocomplete="off" readonly />
       </div>
 
-
-
-      <!-- All / Available tabs -->
-      <div class="pill-tabs" id="home-tabs" role="tablist" aria-label="Anime sections">
-        <button class="pill-tab active" id="tab-all-btn" type="button" role="tab" aria-selected="true">All</button>
-        <button class="pill-tab" id="tab-available-btn" type="button" role="tab" aria-selected="false">Available</button>
+      <div class="pill-tabs">
+        <button class="pill-tab active" data-tab="all">All</button>
+        <button class="pill-tab" data-tab="library">Available</button>
       </div>
 
-      <!-- "All" tab: Trending + Top Airing + Popular -->
+      <!-- "All" tab: Trending + Top Airing -->
       <div id="tab-all">
         <section>
           <div class="section-header-row">
@@ -61,13 +58,15 @@
           <div id="popular-grid-list" class="popular-grid"></div>
           <button id="popular-grid-load-more" class="load-more-btn">Load more</button>
         </section>
-        <section id="available-section">
-          <div id="ad-slot" class="hidden"></div>
-          <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available Anime</h2>
-          <div id="letter-bar" class="letter-bar"></div>
-          <div id="available-groups"></div>
-          <p id="available-empty" class="empty-note hidden">No anime found.</p>
-        </section>
+      </div>
+
+      <!-- "Available" tab: your posted library, browsable A–Z -->
+      <div id="tab-library" class="hidden">
+        <div id="ad-slot" class="hidden"></div>
+        <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available Anime</h2>
+        <div id="letter-bar" class="letter-bar"></div>
+        <div id="available-groups"></div>
+        <p id="available-empty" class="empty-note hidden">No anime found.</p>
       </div>
 
     </div>
