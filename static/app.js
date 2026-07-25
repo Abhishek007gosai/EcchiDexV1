@@ -114,9 +114,7 @@
   const genreBrowseGrid = el("genre-browse-grid");
   const genreViewTitle = el("genre-view-title");
 
-  const pillTabs = document.querySelectorAll(".pill-tab");
   const tabAll = el("tab-all");
-  const tabLibrary = el("tab-library");
 
   const scrollArea = el("scroll-area");
   const trendingRow = el("trending-row");
@@ -313,7 +311,7 @@
   }
 
   // ---------------------------------------------------------------------
-  // Render: Home "All" tab — Trending, Top Airing (+ Load more)
+  // Render: Home "All" tab — Trending, Top Airing, Popular, and Available library
   // ---------------------------------------------------------------------
   function renderTrending() {
     trendingRow.innerHTML = "";
@@ -394,25 +392,20 @@
   popularGridLoadMoreBtn.addEventListener("click", loadMorePopularGrid);
 
   // ---------------------------------------------------------------------
-  // Pill tabs: All (discovery) / Available (posted library)
+  // Render: Available/library view (only local anime with a Join Link, A–Z)
   // ---------------------------------------------------------------------
-  function setPillTab(tab) {
-    pillTabs.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-    tabAll.classList.toggle("hidden", tab !== "all");
-    tabLibrary.classList.toggle("hidden", tab !== "library");
-    if (tab === "library") renderLibraryTab();
+  // Available is a filtered view of the same local anime library used by All.
+  // Only entries with a Join Link belong in Available.
+  function availableWithJoinLinks() {
+    return available.filter((a) => Boolean((a.join_link || "").trim()));
   }
-  pillTabs.forEach((b) => b.addEventListener("click", () => setPillTab(b.dataset.tab)));
 
-  // ---------------------------------------------------------------------
-  // Render: Available/library tab (posted catalog, A–Z)
-  // ---------------------------------------------------------------------
   function lettersWithData() {
-    return new Set(available.map((a) => (a.title[0] || "").toUpperCase()));
+    return new Set(availableWithJoinLinks().map((a) => (a.title[0] || "").toUpperCase()));
   }
 
   function filteredLibrary() {
-    let list = available;
+    let list = availableWithJoinLinks();
     if (libraryQuery.trim()) {
       list = list.filter((a) => matchesLibraryQuery(a.title));
     } else if (activeLetter) {
@@ -1209,7 +1202,7 @@
     } catch (err) {
       available = [];
     }
-    if (!tabLibrary.classList.contains("hidden")) renderLibraryTab();
+    renderLibraryTab();
   }
 
   async function loadAd() {
