@@ -715,6 +715,7 @@ html, body {
   color: #fff;
   font-size: 14px;
   cursor: pointer;
+  z-index: 5;
 }
 
 .sheet-body {

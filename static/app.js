@@ -623,6 +623,9 @@
     }
 
     if (context === "discover" || context === "genre") {
+      const row = document.createElement("div");
+      row.className = "action-row";
+
       if (anime.matchedJoinLink) {
         const joinBtn = document.createElement("button");
         joinBtn.className = "btn btn-primary";
@@ -631,10 +634,37 @@
           if (tg && tg.openLink) tg.openLink(anime.matchedJoinLink);
           else window.open(anime.matchedJoinLink, "_blank");
         });
-        detailActionArea.appendChild(joinBtn);
-        return;
+        row.appendChild(joinBtn);
+      } else {
+        const voteBtn = document.createElement("button");
+        voteBtn.className = "btn btn-primary";
+        voteBtn.textContent = "Vote";
+        voteBtn.addEventListener("click", async () => {
+          voteBtn.disabled = true;
+          try {
+            const result = await api("/api/vote", { method: "POST", body: JSON.stringify({ title: anime.title }) });
+            voteBtn.textContent = result.already_voted
+              ? `\u2713 Already voted (${result.count})`
+              : `\u2713 Voted (${result.count})`;
+            showToast(result.already_voted ? "You already voted for this." : "Vote counted!");
+          } catch (err) {
+            voteBtn.disabled = false;
+            showToast(err.message || "Couldn't send vote right now.");
+          }
+        });
+        row.appendChild(voteBtn);
       }
-      renderVoteButton(anime);
+
+      if (profile && profile.role === "admin" && anime.anilist_id) {
+        const plus = document.createElement("button");
+        plus.className = "plus-btn";
+        plus.textContent = "+";
+        plus.setAttribute("aria-label", "Set join link");
+        plus.addEventListener("click", () => openLinkSheet(anime));
+        row.appendChild(plus);
+      }
+
+      detailActionArea.appendChild(row);
       return;
     }
 
@@ -671,26 +701,6 @@
     detailActionArea.appendChild(row);
   }
 
-  function renderVoteButton(anime) {
-    const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
-    btn.textContent = "Vote";
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      try {
-        const result = await api("/api/vote", { method: "POST", body: JSON.stringify({ title: anime.title }) });
-        btn.textContent = result.already_voted
-          ? `\u2713 Already voted (${result.count})`
-          : `\u2713 Voted (${result.count})`;
-        showToast(result.already_voted ? "You already voted for this." : "Vote counted!");
-      } catch (err) {
-        btn.disabled = false;
-        showToast(err.message || "Couldn't send vote right now.");
-      }
-    });
-    detailActionArea.appendChild(btn);
-  }
-
   function openLocalDetail(item) {
     openDetailSheet(item, "available");
   }
@@ -700,7 +710,7 @@
     try {
       const full = await api(`/api/anilist/${item.anilist_id}`);
       if (currentDetail && currentDetail.title === item.title) {
-        openDetailSheet({ ...full, rating: item.rating ?? full.rating, matchedJoinLink: item.matchedJoinLink }, "discover");
+        openDetailSheet({ ...full, anilist_id: item.anilist_id, rating: item.rating ?? full.rating, matchedJoinLink: item.matchedJoinLink }, "discover");
       }
     } catch (err) {
       if (currentDetail) detailDescription.textContent = "Couldn't load full details.";
@@ -715,7 +725,7 @@
     try {
       const full = await api(`/api/anilist/${item.anilist_id}`);
       if (currentDetail && currentDetail.title === item.title) {
-        openDetailSheet({ ...full, rating: item.rating ?? full.rating, matchedJoinLink: item.matchedJoinLink }, "genre");
+        openDetailSheet({ ...full, anilist_id: item.anilist_id, rating: item.rating ?? full.rating, matchedJoinLink: item.matchedJoinLink }, "genre");
       }
     } catch (err) {
       if (currentDetail) detailDescription.textContent = "Couldn't load full details.";
@@ -744,12 +754,31 @@
     if (!linkTargetAnime) return;
     const value = linkInput.value.trim();
     try {
-      const result = await api(`/api/anime/${linkTargetAnime.id}/link`, { method: "PATCH", body: JSON.stringify({ link: value }) });
-      linkTargetAnime.join_link = value;
-      if (currentDetail && currentDetail.id === linkTargetAnime.id) {
-        currentDetail.join_link = value;
-        renderDetailAction(currentDetail, currentContext);
+      let result;
+      if (linkTargetAnime.id) {
+        result = await api(`/api/anime/${linkTargetAnime.id}/link`, { method: "PATCH", body: JSON.stringify({ link: value }) });
+        linkTargetAnime.join_link = value;
+        if (currentDetail && currentDetail.id === linkTargetAnime.id) {
+          currentDetail.join_link = value;
+        }
+      } else {
+        // Not in the local library yet (Discover/Genre post) — this creates
+        // the library entry with the link already set, same result as
+        // /addpost + Set Join Link in one step.
+        result = await api(`/api/anime/link-anilist/${linkTargetAnime.anilist_id}`, {
+          method: "POST",
+          body: JSON.stringify({ link: value }),
+        });
+        linkTargetAnime.id = result.anime.id;
+        linkTargetAnime.join_link = result.anime.join_link;
+        linkTargetAnime.matchedJoinLink = result.anime.join_link;
+        if (currentDetail && currentDetail.anilist_id === linkTargetAnime.anilist_id) {
+          currentDetail.id = result.anime.id;
+          currentDetail.join_link = result.anime.join_link;
+          currentDetail.matchedJoinLink = result.anime.join_link;
+        }
       }
+      if (currentDetail) renderDetailAction(currentDetail, currentContext);
       closeLinkSheet();
       showToast(result.propagated ? `Link saved — applied to ${result.propagated} related season(s) too` : "Link saved");
       await loadAvailable();
