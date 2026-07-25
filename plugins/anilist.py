@@ -70,6 +70,26 @@ query ($sort: [MediaSort], $page: Int) {
 }
 """
 
+# Same shape as DISCOVER_QUERY, but restricted to anime that is actually
+# still airing right now — used for the "Top Airing" feed so finished
+# shows (e.g. Death Note) don't show up just because they're popular.
+DISCOVER_AIRING_QUERY = """
+query ($sort: [MediaSort], $page: Int) {
+  Page(page: $page, perPage: 10) {
+    pageInfo { hasNextPage }
+    media(type: ANIME, sort: $sort, status: RELEASING) {
+      id
+      title { romaji english }
+      coverImage { extraLarge large }
+      averageScore
+      genres
+      episodes
+      description(asHtml: false)
+    }
+  }
+}
+"""
+
 GENRE_QUERY = """
 query ($genre: String, $page: Int) {
   Page(page: $page, perPage: 10) {
@@ -189,9 +209,9 @@ class AniListSource(AnimeSource):
         self._cache[key] = (now, value)
         return value
 
-    def _discover(self, sort: str, page: int = 1) -> dict:
+    def _discover(self, sort: str, page: int = 1, query: str = DISCOVER_QUERY, cache_prefix: str = "") -> dict:
         def fetch():
-            data = self._post(DISCOVER_QUERY, {"sort": [sort], "page": page})
+            data = self._post(query, {"sort": [sort], "page": page})
             out = []
             for m in data["Page"]["media"]:
                 score = m.get("averageScore")
@@ -206,13 +226,15 @@ class AniListSource(AnimeSource):
                 })
             return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
-        return self._cached(f"{sort}:{page}", fetch)
+        return self._cached(f"{cache_prefix}{sort}:{page}", fetch)
 
     def get_trending(self, page: int = 1) -> dict:
         return self._discover("TRENDING_DESC", page)
 
     def get_popular(self, page: int = 1) -> dict:
-        return self._discover("POPULARITY_DESC", page)
+        # Backs the "Top Airing" section — must only include anime that is
+        # currently releasing, not just anime that is popular overall.
+        return self._discover("POPULARITY_DESC", page, query=DISCOVER_AIRING_QUERY, cache_prefix="airing:")
 
     def browse_genre(self, genre: str, page: int = 1) -> dict:
         def fetch():
@@ -229,11 +251,3 @@ class AniListSource(AnimeSource):
             return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
         return self._cached(f"genre:{genre}:{page}", fetch)
-
-    def get_genre_thumbnail(self, genre: str) -> str | None:
-        """One representative poster per genre, for the Search page's genre
-        tiles. Cached alongside everything else, so this costs one extra
-        AniList call per genre per cache window, not per page view."""
-        data = self.browse_genre(genre, 1)
-        results = data.get("results") or []
-        return results[0]["poster_url"] if results else None
