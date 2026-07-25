@@ -32,7 +32,6 @@ from flask import Flask, abort, jsonify, render_template, request
 from config import Config
 from database import database as db
 from plugins import SOURCES
-from plugins import news as news_plugin
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import (
@@ -46,6 +45,9 @@ from telegram.ext import (
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = Config.SECRET_KEY
+# 1 hour static cache — trims repeat-visit load time on Render/Koyeb without
+# risking a stale asset for too long after a redeploy.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600
 
 db.init_db()
 
@@ -128,7 +130,7 @@ def _search_in_app_button(text: str) -> InlineKeyboardButton:
     query_param = quote(text)
     label = f"\U0001f4d6 Open {Config.BRAND_NAME}"
     if Config.WEBAPP_URL.startswith("https://"):
-        url = f"{Config.WEBAPP_URL}?search={query_param}&tab=news"
+        url = f"{Config.WEBAPP_URL}?search={query_param}"
         return InlineKeyboardButton(label, web_app=WebAppInfo(url=url))
     return InlineKeyboardButton(label, url=Config.WEBAPP_URL or "https://telegram.org")
 
@@ -812,7 +814,7 @@ async def on_text_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not local_matches:
         keyboard = InlineKeyboardMarkup([[_search_in_app_button(text)]])
         await update.message.reply_text(
-            f"'{text}' isn't posted yet. Open {Config.BRAND_NAME} to check News and vote for it.",
+            f"'{text}' isn't posted yet. Open {Config.BRAND_NAME} to search and vote for it.",
             reply_markup=keyboard,
         )
         return
@@ -982,48 +984,6 @@ def api_popular():
         return jsonify(SOURCES["anilist"].get_popular(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
-
-
-@app.get("/api/catalog/featured")
-def api_featured():
-    try:
-        weekly = SOURCES["anilist"].get_trending(1)["results"]
-    except requests.RequestException:
-        return jsonify([])
-
-    by_id = {item["anilist_id"]: item for item in weekly}
-    order = db.get_featured_order()
-    ordered = [by_id[i] for i in order if i in by_id]
-    ordered += [item for item in weekly if item["anilist_id"] not in {o["anilist_id"] for o in ordered}]
-    return jsonify(ordered[:10])
-
-
-@app.post("/api/catalog/featured/move")
-def api_featured_move():
-    user = current_user()
-    if not is_admin(user):
-        abort(403)
-    payload = request.get_json(force=True, silent=True) or {}
-    anilist_id = payload.get("anilist_id")
-    direction = payload.get("direction")
-    if not anilist_id or direction not in ("left", "right"):
-        return jsonify(error="anilist_id and direction (left/right) are required"), 400
-    try:
-        weekly = SOURCES["anilist"].get_trending(1)["results"]
-    except requests.RequestException:
-        weekly = []
-    fallback_ids = [item["anilist_id"] for item in weekly]
-    new_order = db.move_featured(int(anilist_id), direction, fallback_ids)
-    return jsonify(ids=new_order)
-
-
-@app.get("/api/news/latest")
-def api_news_latest():
-    limit = request.args.get("limit", 10, type=int)
-    try:
-        return jsonify(news_plugin.get_latest(limit))
-    except requests.RequestException:
-        return jsonify([])
 
 
 @app.post("/api/search/track")

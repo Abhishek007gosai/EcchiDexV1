@@ -69,11 +69,7 @@ class Config:
 
     # --- External metadata sources ---
     ANILIST_ENDPOINT = "https://graphql.anilist.co"
-    # Anime News Network's public RSS feed — powers the News tab's Anime News carousel.
-    ANN_RSS_URL = os.environ.get("ANN_RSS_URL", "https://www.animenewsnetwork.com/all/rss.xml")
 
     # How long (seconds) trending/popular results are cached in memory
     # before being re-fetched from AniList.
     CATALOG_CACHE_TTL = int(os.environ.get("CATALOG_CACHE_TTL", "600"))
-    # How long (seconds) the news feed is cached before being re-fetched.
-    NEWS_CACHE_TTL = int(os.environ.get("NEWS_CACHE_TTL", "900"))
