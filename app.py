@@ -985,6 +985,15 @@ def api_popular():
         return jsonify({"results": [], "has_next": False})
 
 
+@app.get("/api/catalog/most-popular")
+def api_most_popular():
+    page = request.args.get("page", 1, type=int)
+    try:
+        return jsonify(SOURCES["anilist"].get_most_popular(page))
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
+
+
 @app.post("/api/search/track")
 def api_search_track():
     payload = request.get_json(force=True, silent=True) or {}
