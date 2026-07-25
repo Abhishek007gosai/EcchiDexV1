@@ -220,6 +220,22 @@
     img.src = item.poster_url || "";
     img.alt = item.title;
     card.appendChild(img);
+
+    if (item.rating) {
+      const rating = document.createElement("span");
+      rating.className = "poster-rating";
+      rating.textContent = "\u2605 " + item.rating.toFixed(1);
+      card.appendChild(rating);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "poster-meta";
+    const title = document.createElement("p");
+    title.className = "poster-title";
+    title.textContent = item.title;
+    meta.appendChild(title);
+    card.appendChild(meta);
+
     card.addEventListener("click", onOpen);
     return card;
   }
@@ -500,17 +516,26 @@
     const hasRealBanner = !!anime.banner_url;
     const bannerSrc = anime.banner_url || anime.poster_url;
     // A true banner is already wide, so a centered cover-crop looks right.
-    // A portrait poster forced into that same short, wide box needs the
-    // crop anchored near the top — a centered crop on a tall portrait
-    // zooms in hard and usually lands on a jarring close-up of the eyes.
+    // A portrait poster forced into that same short, wide box can't be
+    // cover-cropped without zooming in hard and losing most of the art
+    // (usually landing on a jarring close-up of just the eyes). Instead,
+    // show it uncropped over a blurred version of itself as a backdrop.
     detailPoster.classList.toggle("poster-fallback", !hasRealBanner);
+    sheetMedia.classList.toggle("has-blur-bg", !hasRealBanner && !!bannerSrc);
+    if (!hasRealBanner && bannerSrc) {
+      sheetMedia.style.setProperty("--banner-img", `url("${bannerSrc}")`);
+    } else {
+      sheetMedia.style.removeProperty("--banner-img");
+    }
     if (bannerSrc) {
       detailPoster.src = bannerSrc;
       detailPoster.onerror = () => {
         detailPoster.style.display = "none";
+        sheetMedia.classList.remove("has-blur-bg");
         const gen = generatedThumb(anime.title);
         gen.style.position = "absolute";
         gen.style.inset = "0";
+        gen.style.zIndex = "1";
         sheetMedia.insertBefore(gen, detailPoster);
       };
     } else {
