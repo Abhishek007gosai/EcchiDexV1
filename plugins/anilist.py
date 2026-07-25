@@ -12,13 +12,17 @@ from plugins.base import AnimeSource
 
 SEARCH_QUERY = """
 query ($search: String, $page: Int) {
-  Page(page: $page, perPage: 5) {
+  Page(page: $page, perPage: 15) {
     pageInfo { hasNextPage }
     media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
       id
       title { romaji english }
       startDate { year }
       coverImage { large }
+      averageScore
+      genres
+      format
+      episodes
     }
   }
 }
@@ -110,15 +114,20 @@ class AniListSource(AnimeSource):
     def search(self, query: str, page: int = 1) -> dict:
         data = self._post(SEARCH_QUERY, {"search": query, "page": page})
         media = data["Page"]["media"]
-        results = [
-            {
+        results = []
+        for m in media:
+            score = m.get("averageScore")
+            results.append({
                 "source_id": m["id"],
+                "anilist_id": m["id"],
                 "title": _best_title(m["title"]),
                 "year": (m.get("startDate") or {}).get("year"),
                 "poster_url": (m.get("coverImage") or {}).get("large"),
-            }
-            for m in media
-        ]
+                "rating": round(score / 10, 1) if score else None,
+                "genres": (m.get("genres") or [])[:3],
+                "format": m.get("format"),
+                "episodes": m.get("episodes"),
+            })
         return {"results": results, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
     def get_details(self, source_id) -> dict:
