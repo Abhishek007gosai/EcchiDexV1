@@ -1168,6 +1168,33 @@ def api_edit_link(anime_id):
     return jsonify(status="updated", link=link, propagated=propagated)
 
 
+@app.post("/api/anime/link-anilist/<int:anilist_id>")
+def api_set_link_from_anilist(anilist_id):
+    """Set a join link for a title that's only been browsed from AniList
+    (Discover/Genre) and doesn't have a local library entry yet. Creates
+    that entry on the fly — from this point on it's a normal posted anime
+    and shows up in the Available tab, same as one added via /addpost."""
+    user = current_user()
+    if not is_admin(user):
+        abort(403)
+    payload = request.get_json(force=True, silent=True) or {}
+    raw_link = (payload.get("link") or "").strip()
+    if not raw_link:
+        return jsonify(error="A join link is required."), 400
+    try:
+        link = normalize_join_link(raw_link)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    try:
+        details = SOURCES["anilist"].get_details(anilist_id)
+    except requests.RequestException:
+        return jsonify(error="Couldn't fetch details from AniList right now."), 502
+    anime_id = db.upsert_anime(details, added_by=user["id"])
+    db.update_link(anime_id, link)
+    propagated = db.propagate_join_link(anime_id, link) if link else 0
+    return jsonify(status="updated", anime=db.get_anime(anime_id), propagated=propagated)
+
+
 @app.get("/api/ads/active")
 def api_ads_active():
     ad = db.get_active_ad()
