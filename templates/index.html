@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0a12" />
+  <meta name="theme-color" content="#f4f1e6" />
   <title>{{ brand_name }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -109,16 +109,6 @@
     <div id="genre-browse-grid" class="grid-2"></div>
   </section>
 
-  <!-- ===================== Notifications view ===================== -->
-  <section id="notifications-view" class="hidden">
-    <div class="subview-topbar">
-      <button class="back-btn" data-back="home">&#8249; back</button>
-      <span class="subview-title">Notifications</span>
-    </div>
-    <div id="notifications-list"></div>
-    <p id="notifications-empty" class="empty-note hidden">No notifications yet.</p>
-  </section>
-
   <!-- ===================== Profile view ===================== -->
   <section id="profile-view" class="hidden">
     <div class="subview-topbar">
@@ -137,10 +127,6 @@
     </button>
     <button class="nav-btn" data-nav="search">
       <span class="nav-icon">&#128269;</span><span class="nav-label">Search</span>
-    </button>
-    <button class="nav-btn" data-nav="notifications">
-      <span class="nav-icon">&#128276;</span><span class="nav-label">Notifications</span>
-      <span id="notif-badge" class="notif-badge hidden">0</span>
     </button>
     <button class="nav-btn" data-nav="profile">
       <span class="nav-icon">&#128100;</span><span class="nav-label">Profile</span>
