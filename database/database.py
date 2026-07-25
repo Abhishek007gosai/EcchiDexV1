@@ -62,14 +62,39 @@ def _to_anime(doc) -> dict | None:
     return d
 
 
+def _family_source_ids(source: str, start_related_ids: list[str]) -> set[str]:
+    """Walk the AniList franchise relation graph (seasons, OVAs, movies,
+    spin-offs, alternates/compilations) across already-posted
+    entries, starting from `start_related_ids`, and return every source_id
+    reachable — not just the immediate one-hop neighbors. This is what lets
+    a link set on Season 1 reach Season 3 even when AniList only records a
+    direct edge between 1<->2 and 2<->3, as long as Season 2 is posted."""
+    seen: set[str] = set()
+    frontier = [str(x) for x in start_related_ids]
+    while frontier:
+        sid = frontier.pop()
+        if sid in seen:
+            continue
+        seen.add(sid)
+        doc = anime_col.find_one({"source": source, "source_id": sid})
+        if doc:
+            for rel in doc.get("related_ids") or []:
+                rel = str(rel)
+                if rel not in seen:
+                    frontier.append(rel)
+    return seen
+
+
 def upsert_anime(details: dict, added_by: int | None = None) -> int:
     """Insert a new catalog entry from a normalized source dict, or update
     the existing one if this (source, source_id) was already posted.
 
-    If this is a brand-new post and any of its AniList-linked prequel/
-    sequel seasons are already posted with a join link set, the new post
-    automatically inherits that same link — so adding "Season 2" of
-    something you've already linked doesn't need a separate /editpost.
+    If this is a brand-new post and any other already-posted season in the
+    same franchise (found by walking the full relation graph, not just
+    this title's direct AniList relations) already has a join link set,
+    the new post automatically inherits that same link — so adding
+    "Season 3" of something you've already linked doesn't need a separate
+    /editpost, even if Season 2 is the only thing directly linking them.
     """
     now = time.time()
     existing = anime_col.find_one({"source": details["source"], "source_id": str(details["source_id"])})
@@ -98,13 +123,15 @@ def upsert_anime(details: dict, added_by: int | None = None) -> int:
 
     inherited_link = None
     if related_ids:
-        related_doc = anime_col.find_one({
-            "source": details["source"],
-            "source_id": {"$in": related_ids},
-            "join_link": {"$nin": [None, ""]},
-        })
-        if related_doc:
-            inherited_link = related_doc["join_link"]
+        family_ids = _family_source_ids(details["source"], related_ids)
+        if family_ids:
+            related_doc = anime_col.find_one({
+                "source": details["source"],
+                "source_id": {"$in": list(family_ids)},
+                "join_link": {"$nin": [None, ""]},
+            })
+            if related_doc:
+                inherited_link = related_doc["join_link"]
 
     new_id = _next_id("anime")
     anime_col.insert_one({
@@ -151,22 +178,22 @@ def update_link(anime_id: int, link: str):
 
 
 def propagate_join_link(anime_id: int, link: str) -> int:
-    """After setting anime_id's join link, apply the same link to any
-    other already-posted seasons AniList lists as its direct prequel/
-    sequel. Returns how many other posts were updated. Only propagates
-    direct relations from this one call — a distant season three hops
-    away in the franchise won't be picked up unless it's also directly
-    related to something already linked."""
+    """After setting anime_id's join link, apply the same link to every
+    other already-posted season in the same franchise — found by walking
+    the AniList franchise relation graph across posted entries, so
+    the whole family picks up the link, not just anime_id's immediate
+    neighbors. Returns how many other posts were updated."""
     if not link:
         return 0
     doc = anime_col.find_one({"_id": anime_id})
     if not doc:
         return 0
-    related_ids = doc.get("related_ids") or []
-    if not related_ids:
+    family_ids = _family_source_ids(doc["source"], doc.get("related_ids") or [])
+    family_ids.discard(str(doc["source_id"]))
+    if not family_ids:
         return 0
     result = anime_col.update_many(
-        {"source": doc["source"], "source_id": {"$in": related_ids}},
+        {"source": doc["source"], "source_id": {"$in": list(family_ids)}},
         {"$set": {"join_link": link, "updated_at": time.time()}},
     )
     return result.modified_count
