@@ -34,13 +34,8 @@
         <button class="pill-tab" data-tab="library">Available</button>
       </div>
 
-      <!-- "All" tab: Featured + Trending + Top Airing + Genres -->
+      <!-- "All" tab: Trending + Top Airing -->
       <div id="tab-all">
-        <section id="featured-section" class="hidden">
-          <div id="featured-carousel"></div>
-          <div id="featured-dots" class="dots-row"></div>
-        </section>
-
         <section>
           <div class="section-header-row">
             <h2 class="section-header"><span class="accent-bar"></span>Trending Now</h2>
@@ -49,14 +44,11 @@
         </section>
 
         <section>
-          <h2 class="section-header"><span class="accent-bar"></span>Popular</h2>
+          <div class="section-header-row">
+            <h2 class="section-header"><span class="accent-bar"></span>Top Airing</h2>
+          </div>
           <div id="top-airing-list" class="popular-grid"></div>
           <p id="popular-load-more" class="search-loading-more hidden">Loading more…</p>
-        </section>
-
-        <section>
-          <h2 class="section-header"><span class="accent-bar"></span>Genres</h2>
-          <div id="genre-chip-row" class="genre-chip-row"></div>
         </section>
       </div>
 
@@ -123,13 +115,16 @@
   <!-- ===================== Persistent bottom nav (shown across all views) ===================== -->
   <nav class="tab-bar">
     <button class="nav-btn active" data-nav="home">
-      <span class="nav-icon">&#127968;</span><span class="nav-label">Home</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/></svg>
+      <span class="nav-label">Home</span>
     </button>
     <button class="nav-btn" data-nav="search">
-      <span class="nav-icon">&#128269;</span><span class="nav-label">Search</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <span class="nav-label">Search</span>
     </button>
     <button class="nav-btn" data-nav="profile">
-      <span class="nav-icon">&#128100;</span><span class="nav-label">Profile</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/></svg>
+      <span class="nav-label">Profile</span>
     </button>
   </nav>
 
