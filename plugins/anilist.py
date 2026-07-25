@@ -174,10 +174,21 @@ class AniListSource(AnimeSource):
         if alt_title == main_title:
             alt_title = None
 
+        # Every relation type that's still genuinely "this anime" (another
+        # season, an OVA/movie tied to the story, a spin-off, an alternate
+        # cut/compilation) — not just direct prequel/sequel — so a join
+        # link set anywhere propagates across the whole franchise. Left out
+        # on purpose: ADAPTATION (source manga/novel), CHARACTER (unrelated
+        # series that merely shares a guest character), and OTHER (too
+        # loose — often crossovers with no real franchise connection).
+        SAME_FRANCHISE_RELATIONS = {
+            "PREQUEL", "SEQUEL", "SIDE_STORY", "PARENT",
+            "ALTERNATIVE", "SPIN_OFF", "SUMMARY", "COMPILATION", "CONTAINS",
+        }
         related_ids = []
         for edge in (m.get("relations") or {}).get("edges", []):
             node = edge.get("node") or {}
-            if edge.get("relationType") in ("PREQUEL", "SEQUEL") and node.get("type") == "ANIME":
+            if edge.get("relationType") in SAME_FRANCHISE_RELATIONS and node.get("type") == "ANIME":
                 related_ids.append(node["id"])
 
         return {
