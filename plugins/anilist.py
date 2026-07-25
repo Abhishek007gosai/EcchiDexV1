@@ -35,14 +35,42 @@ query ($id: Int) {
     description(asHtml: false)
     genres
     averageScore
+    status
+    episodes
+    format
+    duration
+    relations {
+      edges {
+        relationType
+        node { id type }
+      }
+    }
   }
 }
 """
 
 DISCOVER_QUERY = """
-query ($sort: [MediaSort]) {
-  Page(page: 1, perPage: 10) {
+query ($sort: [MediaSort], $page: Int) {
+  Page(page: $page, perPage: 10) {
+    pageInfo { hasNextPage }
     media(type: ANIME, sort: $sort) {
+      id
+      title { romaji english }
+      coverImage { large }
+      averageScore
+      genres
+      episodes
+      description(asHtml: false)
+    }
+  }
+}
+"""
+
+GENRE_QUERY = """
+query ($genre: String, $page: Int) {
+  Page(page: $page, perPage: 10) {
+    pageInfo { hasNextPage }
+    media(type: ANIME, genre: $genre, sort: POPULARITY_DESC) {
       id
       title { romaji english }
       coverImage { large }
@@ -68,7 +96,7 @@ class AniListSource(AnimeSource):
     name = "anilist"
 
     def __init__(self):
-        self._cache: dict[str, tuple[float, list]] = {}
+        self._cache: dict[str, tuple[float, dict]] = {}
 
     def _post(self, query: str, variables: dict) -> dict:
         resp = requests.post(
@@ -97,19 +125,37 @@ class AniListSource(AnimeSource):
         data = self._post(DETAILS_QUERY, {"id": int(source_id)})
         m = data["Media"]
         score = m.get("averageScore")
+        titles = m.get("title") or {}
+        main_title = _best_title(titles)
+        alt_title = titles.get("romaji") if titles.get("english") else None
+        if alt_title == main_title:
+            alt_title = None
+
+        related_ids = []
+        for edge in (m.get("relations") or {}).get("edges", []):
+            node = edge.get("node") or {}
+            if edge.get("relationType") in ("PREQUEL", "SEQUEL") and node.get("type") == "ANIME":
+                related_ids.append(node["id"])
+
         return {
             "source": self.name,
             "source_id": m["id"],
-            "title": _best_title(m["title"]),
+            "title": main_title,
+            "alt_title": alt_title,
             "year": (m.get("startDate") or {}).get("year"),
             "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
             "banner_url": m.get("bannerImage"),
             "description": _clean_description(m.get("description")),
             "genres": m.get("genres") or [],
             "rating": round(score / 10, 1) if score else None,
+            "status": m.get("status"),
+            "episodes": m.get("episodes"),
+            "format": m.get("format"),
+            "duration": m.get("duration"),
+            "related_ids": related_ids,
         }
 
-    # -- Extra: powers the "All" tab discovery feed (not part of the shared interface) --
+    # -- Extra: powers the News tab's Trending/Popular feeds (not part of the shared interface) --
 
     def _cached(self, key: str, fetch):
         now = time.time()
@@ -120,9 +166,34 @@ class AniListSource(AnimeSource):
         self._cache[key] = (now, value)
         return value
 
-    def _discover(self, sort: str) -> list:
+    def _discover(self, sort: str, page: int = 1) -> dict:
         def fetch():
-            data = self._post(DISCOVER_QUERY, {"sort": [sort]})
+            data = self._post(DISCOVER_QUERY, {"sort": [sort], "page": page})
+            out = []
+            for m in data["Page"]["media"]:
+                score = m.get("averageScore")
+                out.append({
+                    "title": _best_title(m["title"]),
+                    "poster_url": (m.get("coverImage") or {}).get("large"),
+                    "rating": round(score / 10, 1) if score else None,
+                    "anilist_id": m["id"],
+                    "genres": (m.get("genres") or [])[:3],
+                    "episodes": m.get("episodes"),
+                    "synopsis": _clean_description(m.get("description"))[:140],
+                })
+            return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
+
+        return self._cached(f"{sort}:{page}", fetch)
+
+    def get_trending(self, page: int = 1) -> dict:
+        return self._discover("TRENDING_DESC", page)
+
+    def get_popular(self, page: int = 1) -> dict:
+        return self._discover("POPULARITY_DESC", page)
+
+    def browse_genre(self, genre: str, page: int = 1) -> dict:
+        def fetch():
+            data = self._post(GENRE_QUERY, {"genre": genre, "page": page})
             out = []
             for m in data["Page"]["media"]:
                 score = m.get("averageScore")
@@ -132,12 +203,14 @@ class AniListSource(AnimeSource):
                     "rating": round(score / 10, 1) if score else None,
                     "anilist_id": m["id"],
                 })
-            return out
+            return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
-        return self._cached(sort, fetch)
+        return self._cached(f"genre:{genre}:{page}", fetch)
 
-    def get_trending(self) -> list:
-        return self._discover("TRENDING_DESC")
-
-    def get_popular(self) -> list:
-        return self._discover("POPULARITY_DESC")
+    def get_genre_thumbnail(self, genre: str) -> str | None:
+        """One representative poster per genre, for the Search page's genre
+        tiles. Cached alongside everything else, so this costs one extra
+        AniList call per genre per cache window, not per page view."""
+        data = self.browse_genre(genre, 1)
+        results = data.get("results") or []
+        return results[0]["poster_url"] if results else None

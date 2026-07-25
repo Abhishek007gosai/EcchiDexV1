@@ -1,8 +1,8 @@
 """
 Anime news source — pulls recent headlines from Anime News Network's public
 RSS feed (https://www.animenewsnetwork.com/all/rss.xml). Powers the News
-tab's #1 Spotlight card. This is a real, publicly documented feed — not a
-fabricated data source — so Spotlight always reflects an actual, current
+tab's Anime News carousel. This is a real, publicly documented feed —
+not a fabricated data source, so it always reflects an actual, current
 news story rather than a re-labelled anime entry.
 """
 
@@ -75,9 +75,3 @@ def _cached(key: str, fetch):
 def get_latest(limit: int = 10) -> list[dict]:
     items = _cached("latest", _fetch_items)
     return items[:limit]
-
-
-def get_spotlight() -> dict | None:
-    """The single most recent story — shown as the "#1 Spotlight" card."""
-    items = get_latest(1)
-    return items[0] if items else None
