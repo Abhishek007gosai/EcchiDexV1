@@ -49,9 +49,9 @@
         </section>
 
         <section>
-          <h2 class="section-header"><span class="accent-bar"></span>Top Airing</h2>
-          <div id="top-airing-list"></div>
-          <button id="popular-load-more" class="btn btn-secondary hidden">Load more</button>
+          <h2 class="section-header"><span class="accent-bar"></span>Popular</h2>
+          <div id="top-airing-list" class="popular-grid"></div>
+          <p id="popular-load-more" class="search-loading-more hidden">Loading more…</p>
         </section>
 
         <section>
@@ -70,22 +70,6 @@
       </div>
 
     </div>
-
-    <nav class="tab-bar">
-      <button class="nav-btn active" data-nav="home">
-        <span class="nav-icon">&#127968;</span><span class="nav-label">Home</span>
-      </button>
-      <button class="nav-btn" data-nav="search">
-        <span class="nav-icon">&#128269;</span><span class="nav-label">Search</span>
-      </button>
-      <button class="nav-btn" data-nav="notifications">
-        <span class="nav-icon">&#128276;</span><span class="nav-label">Notifications</span>
-        <span id="notif-badge" class="notif-badge hidden">0</span>
-      </button>
-      <button class="nav-btn" data-nav="profile">
-        <span class="nav-icon">&#128100;</span><span class="nav-label">Profile</span>
-      </button>
-    </nav>
   </main>
 
   <!-- ===================== Search view ===================== -->
@@ -145,6 +129,23 @@
       <p class="profile-hint">Loading profile…</p>
     </div>
   </section>
+
+  <!-- ===================== Persistent bottom nav (shown across all views) ===================== -->
+  <nav class="tab-bar">
+    <button class="nav-btn active" data-nav="home">
+      <span class="nav-icon">&#127968;</span><span class="nav-label">Home</span>
+    </button>
+    <button class="nav-btn" data-nav="search">
+      <span class="nav-icon">&#128269;</span><span class="nav-label">Search</span>
+    </button>
+    <button class="nav-btn" data-nav="notifications">
+      <span class="nav-icon">&#128276;</span><span class="nav-label">Notifications</span>
+      <span id="notif-badge" class="notif-badge hidden">0</span>
+    </button>
+    <button class="nav-btn" data-nav="profile">
+      <span class="nav-icon">&#128100;</span><span class="nav-label">Profile</span>
+    </button>
+  </nav>
 
   <!-- ===================== Detail bottom sheet (compact centered modal) ===================== -->
   <div id="detail-overlay" class="overlay hidden">
