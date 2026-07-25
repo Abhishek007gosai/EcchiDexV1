@@ -194,23 +194,36 @@
   // ---------------------------------------------------------------------
   // All is the default view. Available is the same local library filtered
   // to entries that currently have a Join Link.
-  function setHomeTab(tab) {
+  async function setHomeTab(tab) {
     const isAvailable = tab === "available";
+
+    // Keep the existing tab position and styling unchanged:
+    // All stays on the left, Available stays on the right.
     tabAllBtn.classList.toggle("active", !isAvailable);
     tabAvailableBtn.classList.toggle("active", isAvailable);
     tabAllBtn.setAttribute("aria-selected", String(!isAvailable));
     tabAvailableBtn.setAttribute("aria-selected", String(isAvailable));
 
-    // Keep the existing All UI untouched; only switch which content is shown.
-    tabAll.querySelectorAll(":scope > section").forEach((section) => {
-      if (section === availableSection) {
-        section.classList.toggle("hidden", !isAvailable);
-      } else {
-        section.classList.toggle("hidden", isAvailable);
-      }
+    // Switch only the content. The Available view is the same local
+    // catalogue filtered to entries that currently have a Join Link.
+    const allSections = tabAll.querySelectorAll(":scope > section");
+    allSections.forEach((section) => {
+      section.classList.toggle("hidden", isAvailable && section !== availableSection);
     });
+    availableSection.classList.toggle("hidden", !isAvailable);
+
+    if (isAvailable) {
+      // Refresh the shared catalogue before filtering so a newly added or
+      // removed Join Link is immediately reflected in Available.
+      try {
+        await loadAvailable();
+      } catch (_) {
+        // Keep the existing loaded data if refresh fails.
+      }
+      renderLibraryTab();
+    }
+
     renderAdSlot();
-    if (isAvailable) renderLibraryTab();
   }
 
   tabAllBtn.addEventListener("click", () => setHomeTab("all"));
