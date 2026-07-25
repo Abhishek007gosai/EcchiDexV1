@@ -155,9 +155,18 @@ def get_anime(anime_id: int) -> dict | None:
 
 
 def list_available() -> list[dict]:
-    """Every post in the local library — a post appears here as soon as
-    /addpost creates it, whether or not a join link has been set yet."""
-    docs = anime_col.find().collation({"locale": "en", "strength": 2}).sort("title", ASCENDING)
+    """Return only local anime that have a Join Link.
+
+    The All view uses the complete local/discovery catalog, while Available
+    is the subset that is actually joinable. Any anime added to the local
+    library is therefore still part of All, and becomes Available as soon
+    as a Join Link is set.
+    """
+    docs = (
+        anime_col.find({"join_link": {"$nin": [None, ""]}})
+        .collation({"locale": "en", "strength": 2})
+        .sort("title", ASCENDING)
+    )
     return [_to_anime(d) for d in docs]
 
 
