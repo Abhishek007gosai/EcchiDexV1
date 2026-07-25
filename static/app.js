@@ -115,9 +115,10 @@
   const genreViewTitle = el("genre-view-title");
 
   const tabAll = el("tab-all");
-  const tabAvailable = el("tab-available");
+  const homeTabs = el("home-tabs");
   const tabAllBtn = el("tab-all-btn");
   const tabAvailableBtn = el("tab-available-btn");
+  const availableSection = el("available-section");
 
   const scrollArea = el("scroll-area");
   const trendingRow = el("trending-row");
@@ -130,34 +131,6 @@
   const availableGroups = el("available-groups");
   const availableEmpty = el("available-empty");
   const adSlot = el("ad-slot");
-
-
-
-  // ---------------------------------------------------------------------
-  // Home All / Available tabs
-  // All is the left tab; Available is the right tab.
-  // Available is a filtered view of the same anime records and only shows
-  // entries that currently have a Join Link.
-  // ---------------------------------------------------------------------
-  function setHomeTab(tab) {
-    const showAvailable = tab === "available";
-    tabAll.classList.toggle("hidden", showAvailable);
-    tabAvailable.classList.toggle("hidden", !showAvailable);
-
-    tabAllBtn.classList.toggle("active", !showAvailable);
-    tabAvailableBtn.classList.toggle("active", showAvailable);
-    tabAllBtn.setAttribute("aria-selected", String(!showAvailable));
-    tabAvailableBtn.setAttribute("aria-selected", String(showAvailable));
-
-    if (showAvailable) {
-      renderLibraryTab();
-      renderAdSlot();
-    }
-    scrollArea.scrollTop = 0;
-  }
-
-  tabAllBtn.addEventListener("click", () => setHomeTab("all"));
-  tabAvailableBtn.addEventListener("click", () => setHomeTab("available"));
 
   const navBtns = document.querySelectorAll(".nav-btn");
 
@@ -215,6 +188,33 @@
     available.forEach((a) => map.set(a.title.toLowerCase(), a));
     return map;
   }
+
+  // ---------------------------------------------------------------------
+  // Home All / Available tab switcher
+  // ---------------------------------------------------------------------
+  // All is the default view. Available is the same local library filtered
+  // to entries that currently have a Join Link.
+  function setHomeTab(tab) {
+    const isAvailable = tab === "available";
+    tabAllBtn.classList.toggle("active", !isAvailable);
+    tabAvailableBtn.classList.toggle("active", isAvailable);
+    tabAllBtn.setAttribute("aria-selected", String(!isAvailable));
+    tabAvailableBtn.setAttribute("aria-selected", String(isAvailable));
+
+    // Keep the existing All UI untouched; only switch which content is shown.
+    tabAll.querySelectorAll(":scope > section").forEach((section) => {
+      if (section === availableSection) {
+        section.classList.toggle("hidden", !isAvailable);
+      } else {
+        section.classList.toggle("hidden", isAvailable);
+      }
+    });
+    renderAdSlot();
+    if (isAvailable) renderLibraryTab();
+  }
+
+  tabAllBtn.addEventListener("click", () => setHomeTab("all"));
+  tabAvailableBtn.addEventListener("click", () => setHomeTab("available"));
 
   // ---------------------------------------------------------------------
   // Top-level navigation (Home / Search / Profile)
@@ -1276,6 +1276,7 @@
   (async function init() {
     document.title = brandName;
     await Promise.all([loadDiscover(), loadAvailable(), loadAd(), preloadProfile()]);
+    setHomeTab("all");
     applyDeepLink();
   })();
 })();
