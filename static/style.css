@@ -6,9 +6,7 @@
   --text: #1b1b16;
   --text-dim: #5c5847;
   --text-faint: #8a8570;
-  --pink: #2f6d34;
-  --purple: #16311a;
-  --grad: linear-gradient(90deg, var(--purple), var(--pink));
+  --grad: linear-gradient(90deg, var(--green-dark), var(--green));
   --amber: #e8a317;
   --green: #2f6d34;
   --green-dark: #16311a;
@@ -206,125 +204,13 @@ html, body {
   padding: 16px;
 }
 
-/* ---------------- featured carousel ---------------- */
-
-#featured-section { margin-bottom: 8px; }
-
-.featured-card {
-  position: relative;
-  border-radius: 18px;
-  overflow: hidden;
-  height: 230px;
-  background: var(--green-dark);
-  border: 1px solid var(--border);
-}
-
-.featured-card img,
-.featured-card .generated-thumb {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.featured-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(12,25,13,0.96) 15%, rgba(12,25,13,0.45) 55%, transparent 85%);
-}
-
-.featured-content {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
-  z-index: 2;
-}
-
-.featured-title {
-  color: #fff;
-  font-size: 20px;
-  font-weight: 800;
-  margin: 0 0 4px;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.featured-subtitle {
-  color: var(--pink);
-  font-size: 12.5px;
-  font-weight: 700;
-  margin: 0 0 6px;
-}
-
-.featured-desc {
-  color: #d8d8e2;
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0 0 12px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.featured-actions { display: flex; gap: 10px; align-items: center; }
-
-.featured-details-btn {
-  background: rgba(255,255,255,0.12);
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.35);
-  padding: 10px 20px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.featured-move-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.35);
-  background: rgba(0,0,0,0.35);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  cursor: pointer;
-  flex: none;
-  margin-left: auto;
-}
-
-.dots-row {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  margin: 10px 0 20px;
-}
-
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--border);
-  cursor: pointer;
-  border: none;
-  padding: 0;
-}
-.dot.active { background: var(--green); width: 16px; border-radius: 3px; }
-
 /* ---------------- poster card (Trending Now) ---------------- */
 
 .poster-card {
   position: relative;
   border-radius: 12px;
   overflow: hidden;
-  background: #1a1a1a;
+  background: var(--surface-2);
   cursor: pointer;
   flex: none;
 }
@@ -399,121 +285,6 @@ html, body {
   font-size: 13px;
   text-align: center;
   padding: 40px 0;
-}
-
-/* ---------------- Top Airing numbered list ---------------- */
-
-.airing-card {
-  display: flex;
-  gap: 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-}
-
-.airing-rank {
-  flex: none;
-  width: 56px;
-  border-radius: 10px;
-  overflow: hidden;
-  position: relative;
-  background: #151520;
-}
-
-.airing-rank img,
-.airing-rank .generated-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  position: absolute;
-  inset: 0;
-}
-
-.airing-rank-number {
-  position: relative;
-  z-index: 2;
-  color: #fff;
-  font-size: 20px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: linear-gradient(to top, rgba(124,58,237,0.55), rgba(236,72,153,0.15));
-}
-
-.airing-body { flex: 1; min-width: 0; }
-
-.airing-top-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.airing-new-ep {
-  display: inline-block;
-  background: var(--grad);
-  color: #fff;
-  font-size: 8.5px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  margin-bottom: 4px;
-}
-
-.airing-title {
-  color: #fff;
-  font-size: 13.5px;
-  font-weight: 700;
-  margin: 0 0 6px;
-  line-height: 1.3;
-}
-
-.airing-rating {
-  flex: none;
-  text-align: right;
-  color: var(--amber);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.airing-genres { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
-
-.airing-genre-pill {
-  font-size: 9.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-.airing-synopsis {
-  color: var(--text-faint);
-  font-size: 11px;
-  line-height: 1.4;
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.airing-arrow {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  color: var(--pink);
-  font-size: 15px;
 }
 
 /* ---------------- Popular grid (2-column poster cards) ---------------- */
@@ -600,28 +371,6 @@ html, body {
 
 /* ---------------- genre chips (Home) + genre tiles (Search) ---------------- */
 
-.genre-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding-bottom: 8px;
-}
-
-.genre-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 9px 14px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-}
-
 .genre-tile-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -635,7 +384,7 @@ html, body {
   overflow: hidden;
   height: 90px;
   cursor: pointer;
-  background: #1a1a1a;
+  background: var(--surface-2);
   border: 1px solid var(--border);
 }
 
@@ -661,7 +410,7 @@ html, body {
 }
 
 .genre-tile-name { color: #fff; font-size: 13px; font-weight: 800; }
-.genre-tile-explore { color: var(--pink); font-size: 10.5px; font-weight: 700; }
+.genre-tile-explore { color: var(--green); font-size: 10.5px; font-weight: 700; }
 
 /* ---------------- letter bar ---------------- */
 
@@ -681,14 +430,14 @@ html, body {
   border-radius: 8px;
   border: none;
   background: var(--surface-2);
-  color: #c9c9c9;
+  color: var(--text-dim);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
 }
 
-.letter-btn:disabled { background: transparent; color: #3d3d3d; cursor: default; }
+.letter-btn:disabled { background: transparent; color: var(--border); cursor: default; }
 .letter-btn.active { background: var(--grad); color: #fff; }
 
 .letter-group { margin-bottom: 20px; }
@@ -700,7 +449,7 @@ html, body {
   margin-bottom: 10px;
 }
 
-.letter-group-label { color: var(--pink); font-weight: 700; font-size: 14px; }
+.letter-group-label { color: var(--green); font-weight: 700; font-size: 14px; }
 .letter-group-line { flex: 1; height: 1px; background: var(--border); }
 
 .available-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -741,12 +490,14 @@ html, body {
   font-family: inherit;
 }
 
-.nav-icon { font-size: 18px; }
+.nav-icon {
+  width: 20px;
+  height: 20px;
+}
 .nav-label { font-size: 9.5px; font-weight: 700; }
 
 .nav-btn.active {
-  background: var(--green-dark);
-  color: #fff;
+  color: var(--green);
 }
 
 /* ---------------- sub-views (Search / Genre / Profile) ---------------- */
@@ -821,7 +572,7 @@ html, body {
   cursor: pointer;
 }
 
-.popular-search-icon { color: var(--pink); font-size: 13px; }
+.popular-search-icon { color: var(--green); font-size: 13px; }
 .popular-search-text { flex: 1; font-size: 13.5px; }
 .popular-search-arrow { color: var(--text-faint); font-size: 13px; }
 
@@ -890,13 +641,14 @@ html, body {
 .sheet {
   width: 100%;
   max-width: 360px;
-  height: min(600px, 82vh);
+  max-height: min(640px, 86vh);
   display: flex;
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 20px;
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   animation: modal-in 0.16s ease-out;
 }
 
@@ -910,14 +662,21 @@ html, body {
   position: relative;
   width: 100%;
   height: 170px;
-  background: #151520;
+  background: var(--surface-2);
 }
 
 .sheet-media img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
+}
+
+.sheet-media img.poster-fallback {
+  /* Portrait poster standing in for a missing wide banner — anchor the
+     crop near the top so it frames a face, not a random mid-image sliver. */
+  object-position: top center;
 }
 
 .close-btn {
@@ -935,12 +694,10 @@ html, body {
 }
 
 .sheet-body {
-  flex: 1;
+  flex: none;
   display: flex;
   flex-direction: column;
-  min-height: 0;
   padding: 16px 18px 18px;
-  overflow: hidden;
 }
 
 .sheet-title {
@@ -970,7 +727,7 @@ html, body {
   object-fit: cover;
   border: 2px solid var(--surface);
   box-shadow: 0 6px 16px rgba(0,0,0,0.5);
-  background: #151520;
+  background: var(--surface-2);
 }
 
 .detail-header-text {
@@ -1026,7 +783,7 @@ html, body {
   text-align: right;
   background: none;
   border: none;
-  color: var(--pink);
+  color: var(--green);
   font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
@@ -1072,16 +829,12 @@ html, body {
 }
 
 .sheet-description {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  color: #c7c7d2;
+  flex: none;
+  color: var(--text-dim);
   font-size: 13.5px;
   line-height: 1.55;
   margin: 0 0 4px;
-  scrollbar-width: none;
 }
-.sheet-description::-webkit-scrollbar { display: none; }
 
 .sheet-description.clamped {
   display: -webkit-box;
@@ -1118,7 +871,7 @@ html, body {
 .btn-outline {
   background: transparent;
   border: 1px solid var(--border);
-  color: var(--pink);
+  color: var(--green);
 }
 
 .btn-disabled {
@@ -1215,8 +968,8 @@ html, body {
   cursor: pointer;
   margin-bottom: 20px;
   height: 150px;
-  background: #151520;
-  border: 1px solid var(--purple);
+  background: var(--surface-2);
+  border: 1px solid var(--green-dark);
 }
 
 .ad-card img,

@@ -11,8 +11,8 @@
     try {
       tg.ready();
       tg.expand();
-      tg.setHeaderColor && tg.setHeaderColor("#0a0a12");
-      tg.setBackgroundColor && tg.setBackgroundColor("#0a0a12");
+      tg.setHeaderColor && tg.setHeaderColor("#f4f1e6");
+      tg.setBackgroundColor && tg.setBackgroundColor("#f4f1e6");
     } catch (e) { /* not fatal */ }
   }
   const initData = tg ? tg.initData : "";
@@ -110,16 +110,12 @@
   const genreTileGrid = el("genre-tile-grid");
   const genreBrowseGrid = el("genre-browse-grid");
   const genreViewTitle = el("genre-view-title");
-  const genreChipRow = el("genre-chip-row");
 
   const pillTabs = document.querySelectorAll(".pill-tab");
   const tabAll = el("tab-all");
   const tabLibrary = el("tab-library");
 
   const scrollArea = el("scroll-area");
-  const featuredSection = el("featured-section");
-  const featuredCarousel = el("featured-carousel");
-  const featuredDots = el("featured-dots");
   const trendingRow = el("trending-row");
   const topAiringList = el("top-airing-list");
   const popularLoadMore = el("popular-load-more");
@@ -169,14 +165,11 @@
   let popular = [];
   let popularPage = 1;
   let popularHasNext = false;
-  let featuredItems = [];
   let available = [];
   let activeAd = null;
   let activeLetter = null;
   let libraryQuery = "";
   let profile = null;
-  let featuredIndex = 0;
-  let featuredTimer = null;
 
   const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -192,8 +185,6 @@
   function showView(name) {
     Object.entries(allViews).forEach(([key, node]) => node.classList.toggle("hidden", key !== name));
     navBtns.forEach((b) => b.classList.toggle("active", b.dataset.nav === (name === "app" ? "home" : name)));
-    if (featuredTimer) { clearInterval(featuredTimer); featuredTimer = null; }
-    if (name === "app") startFeaturedAutoplay();
   }
 
   navBtns.forEach((btn) => btn.addEventListener("click", () => {
@@ -324,104 +315,7 @@
   }
 
   // ---------------------------------------------------------------------
-  // Featured carousel — "Popular this week" anime, admin-reorderable.
-  // ---------------------------------------------------------------------
-  function renderFeatured() {
-    featuredCarousel.innerHTML = "";
-    featuredDots.innerHTML = "";
-    if (!featuredItems.length) {
-      featuredSection.classList.add("hidden");
-      return;
-    }
-    featuredSection.classList.remove("hidden");
-    const item = featuredItems[featuredIndex % featuredItems.length];
-    const byTitle = availableByTitle();
-    const matched = byTitle.get(item.title.toLowerCase());
-    item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-
-    const card = document.createElement("div");
-    card.className = "featured-card";
-    thumbImg(card, item.poster_url, item.title);
-
-    const content = document.createElement("div");
-    content.className = "featured-content";
-    const title = document.createElement("p");
-    title.className = "featured-title";
-    title.textContent = item.title;
-    content.appendChild(title);
-    if (item.genres && item.genres.length) {
-      const desc = document.createElement("p");
-      desc.className = "featured-desc";
-      desc.textContent = item.genres.join(" \u00b7 ");
-      content.appendChild(desc);
-    }
-
-    const actions = document.createElement("div");
-    actions.className = "featured-actions";
-    const detailsBtn = document.createElement("button");
-    detailsBtn.className = "btn btn-secondary featured-details-btn";
-    detailsBtn.textContent = "Details";
-    detailsBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openDiscoverDetail(item);
-    });
-    actions.appendChild(detailsBtn);
-
-    if (profile && profile.role === "admin") {
-      const moveLeft = document.createElement("button");
-      moveLeft.className = "featured-move-btn";
-      moveLeft.textContent = "\u2039";
-      moveLeft.setAttribute("aria-label", "Move earlier");
-      moveLeft.addEventListener("click", (e) => { e.stopPropagation(); moveFeatured(item, "left"); });
-      actions.appendChild(moveLeft);
-
-      const moveRight = document.createElement("button");
-      moveRight.className = "featured-move-btn";
-      moveRight.textContent = "\u203a";
-      moveRight.setAttribute("aria-label", "Move later");
-      moveRight.addEventListener("click", (e) => { e.stopPropagation(); moveFeatured(item, "right"); });
-      actions.appendChild(moveRight);
-    }
-    content.appendChild(actions);
-    card.appendChild(content);
-
-    card.addEventListener("click", () => openDiscoverDetail(item));
-    featuredCarousel.appendChild(card);
-
-    featuredItems.forEach((_, i) => {
-      const dot = document.createElement("button");
-      dot.className = "dot" + (i === featuredIndex % featuredItems.length ? " active" : "");
-      dot.addEventListener("click", () => { featuredIndex = i; renderFeatured(); resetFeaturedAutoplay(); });
-      featuredDots.appendChild(dot);
-    });
-  }
-
-  async function moveFeatured(item, direction) {
-    try {
-      await api("/api/catalog/featured/move", {
-        method: "POST",
-        body: JSON.stringify({ anilist_id: item.anilist_id, direction }),
-      });
-      await loadFeatured();
-    } catch (err) {
-      showToast(err.message || "Couldn't reorder right now.");
-    }
-  }
-
-  function startFeaturedAutoplay() {
-    if (featuredTimer || featuredItems.length < 2) return;
-    featuredTimer = setInterval(() => {
-      featuredIndex = (featuredIndex + 1) % featuredItems.length;
-      renderFeatured();
-    }, 6000);
-  }
-  function resetFeaturedAutoplay() {
-    if (featuredTimer) { clearInterval(featuredTimer); featuredTimer = null; }
-    startFeaturedAutoplay();
-  }
-
-  // ---------------------------------------------------------------------
-  // Render: Home "All" tab — Trending, Top Airing (+ Load more), Genres
+  // Render: Home "All" tab — Trending, Top Airing (+ Load more)
   // ---------------------------------------------------------------------
   function renderTrending() {
     trendingRow.innerHTML = "";
@@ -468,17 +362,6 @@
     const nearBottom = scrollArea.scrollTop + scrollArea.clientHeight > scrollArea.scrollHeight - 400;
     if (nearBottom) loadMorePopular();
   }, 150));
-
-  function renderGenreChips() {
-    genreChipRow.innerHTML = "";
-    GENRES.forEach((g) => {
-      const chip = document.createElement("button");
-      chip.className = "genre-chip";
-      chip.textContent = g;
-      chip.addEventListener("click", () => openGenreView(g));
-      genreChipRow.appendChild(chip);
-    });
-  }
 
   // ---------------------------------------------------------------------
   // Pill tabs: All (discovery) / Available (posted library)
@@ -602,7 +485,7 @@
   // Detail sheet (compact centered modal)
   // ---------------------------------------------------------------------
   let currentDetail = null;
-  let currentContext = null; // "available" | "news" | "newsarticle" | "ad" | "genre"
+  let currentContext = null; // "available" | "discover" | "ad" | "genre"
   let descriptionExpanded = false;
 
   function openDetailSheet(anime, context) {
@@ -614,7 +497,13 @@
     sheetMedia.querySelectorAll(".generated-thumb").forEach((n) => n.remove());
     detailPoster.src = "";
     detailPoster.style.display = "";
+    const hasRealBanner = !!anime.banner_url;
     const bannerSrc = anime.banner_url || anime.poster_url;
+    // A true banner is already wide, so a centered cover-crop looks right.
+    // A portrait poster forced into that same short, wide box needs the
+    // crop anchored near the top — a centered crop on a tall portrait
+    // zooms in hard and usually lands on a jarring close-up of the eyes.
+    detailPoster.classList.toggle("poster-fallback", !hasRealBanner);
     if (bannerSrc) {
       detailPoster.src = bannerSrc;
       detailPoster.onerror = () => {
@@ -633,11 +522,11 @@
     }
 
     // The small overlapping poster thumbnail is shown for any real anime
-    // post (available / news / genre contexts) as long as we have a poster
+    // post (available / discover / genre contexts) as long as we have a poster
     // image at all — it doesn't need to differ from the banner. It's only
-    // hidden for single-image contexts (news articles, ads, notifications)
+    // hidden for single-image contexts (ads, notifications)
     // where there's nothing distinct to overlap.
-    const showThumb = ["available", "news", "genre"].includes(context) && !!anime.poster_url;
+    const showThumb = ["available", "discover", "genre"].includes(context) && !!anime.poster_url;
     if (showThumb) {
       detailThumb.src = anime.poster_url;
       detailThumb.style.display = "";
@@ -713,19 +602,7 @@
 
   function renderDetailAction(anime, context) {
     detailActionArea.innerHTML = "";
-    reportOpenBtn.classList.toggle("hidden", !["available", "news", "genre"].includes(context));
-
-    if (context === "newsarticle") {
-      const readBtn = document.createElement("button");
-      readBtn.className = "btn btn-primary";
-      readBtn.textContent = "Read Full Story";
-      readBtn.addEventListener("click", () => {
-        if (tg && tg.openLink) tg.openLink(anime.link);
-        else window.open(anime.link, "_blank");
-      });
-      detailActionArea.appendChild(readBtn);
-      return;
-    }
+    reportOpenBtn.classList.toggle("hidden", !["available", "discover", "genre"].includes(context));
 
     if (context === "ad" || context === "notification") {
       if (anime.link) {
@@ -742,7 +619,7 @@
       return;
     }
 
-    if (context === "news" || context === "genre") {
+    if (context === "discover" || context === "genre") {
       if (anime.matchedJoinLink) {
         const joinBtn = document.createElement("button");
         joinBtn.className = "btn btn-primary";
@@ -794,18 +671,18 @@
   function renderVoteButton(anime) {
     const btn = document.createElement("button");
     btn.className = "btn btn-primary";
-    btn.textContent = "Request Anime";
+    btn.textContent = "Vote";
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       try {
         const result = await api("/api/vote", { method: "POST", body: JSON.stringify({ title: anime.title }) });
         btn.textContent = result.already_voted
-          ? `\u2713 Already requested (${result.count})`
-          : `\u2713 Requested (${result.count})`;
-        showToast(result.already_voted ? "You already requested this." : "Request sent!");
+          ? `\u2713 Already voted (${result.count})`
+          : `\u2713 Voted (${result.count})`;
+        showToast(result.already_voted ? "You already voted for this." : "Vote counted!");
       } catch (err) {
         btn.disabled = false;
-        showToast(err.message || "Couldn't send request right now.");
+        showToast(err.message || "Couldn't send vote right now.");
       }
     });
     detailActionArea.appendChild(btn);
@@ -816,11 +693,11 @@
   }
 
   async function openDiscoverDetail(item) {
-    openDetailSheet({ ...item, description: "Loading synopsis...", genres: item.genres || [] }, "news");
+    openDetailSheet({ ...item, description: "Loading synopsis...", genres: item.genres || [] }, "discover");
     try {
       const full = await api(`/api/anilist/${item.anilist_id}`);
       if (currentDetail && currentDetail.title === item.title) {
-        openDetailSheet({ ...full, rating: item.rating ?? full.rating, matchedJoinLink: item.matchedJoinLink }, "news");
+        openDetailSheet({ ...full, rating: item.rating ?? full.rating, matchedJoinLink: item.matchedJoinLink }, "discover");
       }
     } catch (err) {
       if (currentDetail) detailDescription.textContent = "Couldn't load full details.";
@@ -840,16 +717,6 @@
     } catch (err) {
       if (currentDetail) detailDescription.textContent = "Couldn't load full details.";
     }
-  }
-
-  function openNewsArticleDetail(item) {
-    openDetailSheet({
-      title: item.title,
-      description: item.summary || "No summary available.",
-      genres: [],
-      poster_url: item.image,
-      link: item.link,
-    }, "newsarticle");
   }
 
   // ---------------------------------------------------------------------
@@ -1168,7 +1035,7 @@
   // ---------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------
-  async function loadNews() {
+  async function loadDiscover() {
     try {
       const [trendingData, popularData] = await Promise.all([
         api("/api/catalog/trending"),
@@ -1185,17 +1052,6 @@
     }
     renderTrending();
     renderTopAiring();
-  }
-
-  async function loadFeatured() {
-    try {
-      featuredItems = await api("/api/catalog/featured");
-    } catch (err) {
-      featuredItems = [];
-    }
-    featuredIndex = 0;
-    renderFeatured();
-    startFeaturedAutoplay();
   }
 
   async function loadAvailable() {
@@ -1246,9 +1102,7 @@
 
   (async function init() {
     document.title = brandName;
-    renderGenreChips();
-    await Promise.all([loadNews(), loadAvailable(), loadFeatured(), loadAd(), preloadProfile()]);
-    renderFeatured();
+    await Promise.all([loadDiscover(), loadAvailable(), loadAd(), preloadProfile()]);
     applyDeepLink();
   })();
 })();
