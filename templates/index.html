@@ -47,8 +47,16 @@
           <div class="section-header-row">
             <h2 class="section-header section-header--airing"><span class="accent-bar"></span>Top Airing</h2>
           </div>
-          <div id="top-airing-list" class="popular-grid"></div>
+          <div id="top-airing-list" class="hscroll"></div>
           <p id="popular-load-more" class="search-loading-more hidden">Loading more…</p>
+        </section>
+
+        <section>
+          <div class="section-header-row">
+            <h2 class="section-header section-header--popular"><span class="accent-bar"></span>Popular</h2>
+          </div>
+          <div id="popular-grid-list" class="popular-grid"></div>
+          <button id="popular-grid-load-more" class="load-more-btn">Load more</button>
         </section>
       </div>
 
@@ -91,7 +99,7 @@
 
       <div class="section-header-row">
         <h2 class="section-header section-header--popular"><span class="accent-bar"></span>Popular Searches</h2>
-        <button id="popular-search-clear" class="text-link hidden">Clear All</button>
+        <button id="popular-search-refresh" class="text-link">Refresh</button>
       </div>
       <div id="popular-search-list"></div>
 
@@ -140,7 +148,7 @@
   <div id="detail-overlay" class="overlay hidden">
     <div class="sheet" id="detail-sheet">
       <div class="sheet-media">
-        <img id="detail-poster" src="" alt="" />
+        <img id="detail-poster" src="" alt="" decoding="async" />
         <button id="detail-close" class="close-btn">&#10005;</button>
       </div>
       <div class="sheet-body">
