@@ -1010,31 +1010,44 @@ def api_search_clear():
     return jsonify(status="cleared")
 
 
-_genre_thumbs_cache: dict = {"at": 0, "data": None}
+_genre_thumbs_cache: dict = {}  # genre -> (fetched_at, thumbnail_url)
 
 
 @app.get("/api/genres")
 def api_genres():
     now = time.time()
-    cached = _genre_thumbs_cache
-    if cached["data"] and now - cached["at"] < Config.CATALOG_CACHE_TTL:
-        return jsonify(cached["data"])
 
     def fetch_one(g):
         try:
-            return {"genre": g, "thumbnail": SOURCES["anilist"].get_genre_thumbnail(g)}
+            return g, SOURCES["anilist"].get_genre_thumbnail(g)
         except requests.RequestException:
-            return {"genre": g, "thumbnail": None}
+            return g, None
 
-    with ThreadPoolExecutor(max_workers=len(GENRES)) as pool:
-        out = list(pool.map(fetch_one, GENRES))
-    out.sort(key=lambda item: GENRES.index(item["genre"]))
+    stale = [
+        g for g in GENRES
+        if g not in _genre_thumbs_cache or now - _genre_thumbs_cache[g][0] >= Config.CATALOG_CACHE_TTL
+    ]
 
-    # Only cache a full, successful result — a partial failure should retry
-    # on the next request rather than sticking around for CATALOG_CACHE_TTL.
-    if all(item["thumbnail"] for item in out):
-        _genre_thumbs_cache["at"] = now
-        _genre_thumbs_cache["data"] = out
+    if stale:
+        # Small stagger instead of firing every request in the same instant —
+        # spreads the burst out enough to avoid tripping AniList's rate limit
+        # on most requests at once, on top of the retry-with-backoff in _post.
+        with ThreadPoolExecutor(max_workers=min(4, len(stale))) as pool:
+            futures = []
+            for i, g in enumerate(stale):
+                time.sleep(0.05 if i else 0)
+                futures.append(pool.submit(fetch_one, g))
+            for future in futures:
+                g, thumb = future.result()
+                # Only overwrite the cache on success — a failure keeps
+                # whatever thumbnail (possibly stale) we had before, rather
+                # than blanking out a tile that was working a moment ago.
+                if thumb:
+                    _genre_thumbs_cache[g] = (now, thumb)
+                elif g not in _genre_thumbs_cache:
+                    _genre_thumbs_cache[g] = (0, None)
+
+    out = [{"genre": g, "thumbnail": _genre_thumbs_cache.get(g, (0, None))[1]} for g in GENRES]
     return jsonify(out)
 
 
