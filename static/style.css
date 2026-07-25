@@ -739,25 +739,13 @@ html, body {
   flex: none;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin: -52px 0 12px;
-}
-
-.detail-thumb {
-  flex: none;
-  width: 64px;
-  height: 88px;
-  border-radius: 10px;
-  object-fit: cover;
-  border: 2px solid var(--surface);
-  box-shadow: 0 6px 16px rgba(0,0,0,0.5);
-  background: var(--surface-2);
+  margin: 0 0 12px;
 }
 
 .detail-header-text {
   flex: 1;
   min-width: 0;
-  padding-top: 44px;
+  padding-top: 14px;
 }
 
 .detail-subtitle {

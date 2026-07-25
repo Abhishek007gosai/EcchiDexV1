@@ -129,7 +129,6 @@
 
   const detailOverlay = el("detail-overlay");
   const detailPoster = el("detail-poster");
-  const detailThumb = el("detail-thumb");
   const detailTitle = el("detail-title");
   const detailSubtitle = el("detail-subtitle");
   const detailMetaPills = el("detail-meta-pills");
@@ -544,27 +543,6 @@
       gen.style.position = "absolute";
       gen.style.inset = "0";
       sheetMedia.insertBefore(gen, detailPoster);
-    }
-
-    // The small overlapping poster thumbnail is shown for any real anime
-    // post (available / discover / genre contexts) as long as we have a poster
-    // image at all — it doesn't need to differ from the banner. It's only
-    // hidden for single-image contexts (ads, notifications)
-    // where there's nothing distinct to overlap.
-    const showThumb = ["available", "discover", "genre"].includes(context) && !!anime.poster_url;
-    if (showThumb) {
-      detailThumb.src = anime.poster_url;
-      detailThumb.style.display = "";
-      detailThumb.classList.remove("hidden");
-      detailThumb.onerror = () => {
-        detailThumb.style.display = "none";
-        const gen = generatedThumb(anime.title);
-        gen.className = "detail-thumb generated-thumb";
-        detailThumb.insertAdjacentElement("afterend", gen);
-        detailThumb.classList.add("hidden");
-      };
-    } else {
-      detailThumb.classList.add("hidden");
     }
 
     detailTitle.textContent = anime.title;
