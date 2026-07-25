@@ -115,6 +115,9 @@
   const genreViewTitle = el("genre-view-title");
 
   const tabAll = el("tab-all");
+  const tabAvailable = el("tab-available");
+  const tabAllBtn = el("tab-all-btn");
+  const tabAvailableBtn = el("tab-available-btn");
 
   const scrollArea = el("scroll-area");
   const trendingRow = el("trending-row");
@@ -127,6 +130,34 @@
   const availableGroups = el("available-groups");
   const availableEmpty = el("available-empty");
   const adSlot = el("ad-slot");
+
+
+
+  // ---------------------------------------------------------------------
+  // Home All / Available tabs
+  // All is the left tab; Available is the right tab.
+  // Available is a filtered view of the same anime records and only shows
+  // entries that currently have a Join Link.
+  // ---------------------------------------------------------------------
+  function setHomeTab(tab) {
+    const showAvailable = tab === "available";
+    tabAll.classList.toggle("hidden", showAvailable);
+    tabAvailable.classList.toggle("hidden", !showAvailable);
+
+    tabAllBtn.classList.toggle("active", !showAvailable);
+    tabAvailableBtn.classList.toggle("active", showAvailable);
+    tabAllBtn.setAttribute("aria-selected", String(!showAvailable));
+    tabAvailableBtn.setAttribute("aria-selected", String(showAvailable));
+
+    if (showAvailable) {
+      renderLibraryTab();
+      renderAdSlot();
+    }
+    scrollArea.scrollTop = 0;
+  }
+
+  tabAllBtn.addEventListener("click", () => setHomeTab("all"));
+  tabAvailableBtn.addEventListener("click", () => setHomeTab("available"));
 
   const navBtns = document.querySelectorAll(".nav-btn");
 
