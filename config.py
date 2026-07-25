@@ -69,7 +69,7 @@ class Config:
 
     # --- External metadata sources ---
     ANILIST_ENDPOINT = "https://graphql.anilist.co"
-    # Anime News Network's public RSS feed — powers the News tab's Spotlight card.
+    # Anime News Network's public RSS feed — powers the News tab's Anime News carousel.
     ANN_RSS_URL = os.environ.get("ANN_RSS_URL", "https://www.animenewsnetwork.com/all/rss.xml")
 
     # How long (seconds) trending/popular results are cached in memory

@@ -7,32 +7,69 @@ bot runs in the same process via a Telegram webhook.
 ## What's included
 
 - **`/anidex`** — welcome message with an Open Mini App button (`/start` stays silent).
+  The message text is fully editable via `START_MSG` (see `.env.example`).
 - **`/addpost <name>`** — admin-only. Searches AniList, shows paginated
   results, and on your pick, creates the post directly under **Available**
-  — then sends a follow-up message prompting you to set its join link.
+  — then prompts you to just send the join link as your next message.
+- **`/editpost <name>`** — admin-only. Finds a matching post (or lets you
+  pick, if several match), then asks for the new join link. Shows a
+  preview with Done/Cancel before saving.
 - **`/delpost <name>`** — admin-only. Deletes a matching post (or lets you
   choose which one, if several match).
+- **`/ad <duration>`** — admin-only. Starts a short wizard (image URL →
+  caption → optional link) for a promotional card shown at the top of the
+  Available tab. Duration examples: `/ad 1 day`, `/ad 3 hours`, `/ad 10 m`.
+- **`/rmad`** — admin-only. Ends the active ad immediately and reports its
+  final tap/click stats.
+- **`/adstats`** — admin-only. Shows the active ad's live tap/click counts
+  and time remaining.
+- **`/wbroadcast <duration>`** — admin-only. Same wizard pattern as `/ad`
+  (image URL → caption → optional link), but posts into the mini app's
+  **Notifications** tab instead of the Available tab, exactly as sent,
+  until it expires.
+- **`/refreshposts`** — admin-only. Re-syncs every posted anime's metadata
+  from AniList (rating, description, airing status) and flags any that
+  just finished airing all episodes. Manual, since this process has no
+  background scheduler — see the note near the bottom of this file.
+- **`/cmds`** — lists every command, tailored to whether you're an admin.
 - **Auto-search** — send the bot any plain text (not a command) and it
-  searches your posted library first, then AniList if nothing local
-  matches, replying with a card (and a Join or Request Anime button) right
-  in the chat.
-- **Mini app** — tabs are **Available** (your posted catalog, browsable
-  A–Z) and **News** (a #1 Spotlight story from Anime News Network, plus
-  Trending Now + Popular live from AniList — discovery only, no
-  request/join/report actions there).
-- **Request Anime / Join** — an Available post shows Request Anime until
-  you set a join link, then shows Join instead. Requests notify your log
-  channel with Accept / Cancel buttons.
-- **Report an issue** — Available posts only (not News/Spotlight). Preset
-  reasons + optional 50-character note, sent to your log channel.
+  searches your **Available** library only, replying with just the
+  title and a button that deep-links straight into the mini app at that
+  exact post. If nothing matches, it offers to open the mini app's Search
+  page, pre-searched.
+- **Mini app** — bottom nav is **Home / Search / Notifications / Profile**.
+  Home has an **All / Available** pill switch: All shows a Featured promo
+  carousel (from Anime News Network), Trending Now, a numbered Top Airing
+  list (with Load More), and a Genres row; Available is your posted
+  catalog, browsable A–Z, with the ad slot when one is running. Search is
+  a dedicated page with Popular Searches (tracked in MongoDB) and genre
+  tiles that browse AniList by genre.
+- **Voting** — any Trending/Top Airing/genre item that isn't posted yet
+  shows a Vote button instead of Join. Every 20 votes, your log channel
+  gets a "people are demanding this" notification with a one-tap "Add
+  This Anime" button. If an item's title matches an Available post that
+  already has a join link, it shows Join instead of Vote automatically.
+- **Report** — Available posts only (not discovery items, ads, or
+  notifications). Preset reasons + optional 50-character note, sent to
+  your log channel.
 - **Profile** — Telegram ID, registration status, role, access, verified
   via Telegram's WebApp `initData` signature.
-- **Admin ➕ link editor** — a ➕ button next to Join/Request (admin/owner
+- **Admin ➕ link editor** — a ➕ button next to Join/Coming Soon (admin/owner
   only) opens a "Set Join Link" sheet accepting a channel ID, @username, or
-  URL — the input is validated and normalized into an openable
-  `https://t.me/...` link server-side before saving, with a clear error
-  message if it can't be turned into one (e.g. a bare numeric channel ID).
-- Post details open as a small centered card, not a full-screen page.
+  URL. Channel IDs are turned into a real Telegram invite link via the Bot
+  API automatically (the bot must be an admin in that channel);
+  @usernames and t.me links are normalized the same way the "Set Join
+  Link" field always claimed to support.
+- **Season auto-linking** — setting a join link (via `/addpost`'s
+  follow-up, `/editpost`, or the mini app's ➕ editor) automatically
+  applies the same link to any other posted season AniList lists as a
+  direct prequel/sequel of that title. Adding a new season later also
+  auto-inherits the link if a directly related season is already linked
+  — only direct relations are followed, not distant ones several seasons
+  away in the same franchise.
+- Post details open as a small, fixed-size centered card — not a
+  full-screen page — with the action buttons always in the same spot
+  regardless of title/genre/description length.
 
 ## 1. Create the bot
 
