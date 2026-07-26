@@ -88,7 +88,7 @@ def _family_source_ids(source: str, start_related_ids: list[str]) -> set[str]:
 def find_inherited_link(source: str, related_ids: list[str]) -> str | None:
     """Look for a join link anywhere in the same franchise (walking the
     full relation graph across already-posted entries). Standalone so it
-    can be checked *before* a title is saved — e.g. from an admin workflow, to
+    can be checked *before* a title is saved — e.g. from /addpost, to
     decide whether a brand-new post can be auto-linked immediately instead
     of prompting the admin for a link at all."""
     if not related_ids:
@@ -113,7 +113,7 @@ def upsert_anime(details: dict, added_by: int | None = None) -> int:
     this title's direct AniList relations) already has a join link set,
     the new post automatically inherits that same link — so adding
     "Season 3" of something you've already linked doesn't need a separate
-    an admin edit workflow, even if Season 2 is the only thing directly linking them.
+    /editpost, even if Season 2 is the only thing directly linking them.
     """
     now = time.time()
     existing = anime_col.find_one({"source": details["source"], "source_id": str(details["source_id"])})
@@ -189,8 +189,9 @@ def list_available() -> list[dict]:
     """Every posted title in MongoDB. Since a title is only ever saved
     once it has a join link (see upsert_anime/delete_anime_family), this
     is effectively already "linked only" — but it's still the raw,
-    unfiltered query used by admin workflows regardless of anything the
-    public-facing API layer additionally filters."""
+    unfiltered query, used directly by admin bot commands (/editpost,
+    /delpost, /refreshposts) that need to find a post regardless of
+    anything the public-facing API layer additionally filters."""
     docs = anime_col.find().collation({"locale": "en", "strength": 2}).sort("title", ASCENDING)
     return [_to_anime(d) for d in docs]
 
@@ -369,7 +370,7 @@ def record_ad_click():
 
 def get_ad_stats() -> dict | None:
     """Like get_active_ad, but also returns already-expired stats one last
-    time (without deleting) so final statistics can be reported right at
+    time (without deleting) so /adstats can report a final tally right at
     the moment it ends, before the next read clears it."""
     doc = ads_col.find_one({"_id": AD_DOC_ID})
     return doc
@@ -446,7 +447,7 @@ def clear_recent_searches(user_id: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Notifications shown in the
+# Notifications — admin broadcasts pushed via /wbroadcast, shown in the
 # mini app's Notifications tab exactly as sent (thumbnail + caption + link).
 # ---------------------------------------------------------------------------
 
