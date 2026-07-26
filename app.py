@@ -1133,8 +1133,6 @@ def api_profile():
         telegram_id=user["id"],
         username=user.get("username"),
         first_name=user.get("first_name"),
-        last_name=user.get("last_name"),
-        photo_url=user.get("photo_url"),
         is_admin=is_admin(user),
     )
     return jsonify(profile)
