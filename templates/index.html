@@ -10,7 +10,7 @@
 </head>
 <body data-brand="{{ brand_name }}">
 
-  
+  <!-- ===================== Home view ===================== -->
   <main id="app-view">
     <div class="scroll-area" id="scroll-area">
 
@@ -34,7 +34,7 @@
         <button class="pill-tab" data-tab="library">Available</button>
       </div>
 
-      
+      <!-- "All" tab: Trending + Top Airing -->
       <div id="tab-all">
         <section>
           <div class="section-header-row">
@@ -60,8 +60,9 @@
         </section>
       </div>
 
-      
+      <!-- "Available" tab: your posted library, browsable A–Z -->
       <div id="tab-library" class="hidden">
+        <div id="ad-slot" class="hidden"></div>
         <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available Anime</h2>
         <div id="letter-bar" class="letter-bar"></div>
         <div id="available-groups"></div>
@@ -71,7 +72,7 @@
     </div>
   </main>
 
-  
+  <!-- ===================== Search view ===================== -->
   <section id="search-view" class="hidden">
     <div class="subview-topbar">
       <button class="back-btn" data-back="home">&#8249; back</button>
@@ -107,7 +108,7 @@
     </div>
   </section>
 
-  
+  <!-- ===================== Genre browse view ===================== -->
   <section id="genre-view" class="hidden">
     <div class="subview-topbar">
       <button class="back-btn" data-back="search">&#8249; back</button>
@@ -116,7 +117,7 @@
     <div id="genre-browse-grid" class="grid-2"></div>
   </section>
 
-  
+  <!-- ===================== Profile view ===================== -->
   <section id="profile-view" class="hidden">
     <div class="subview-topbar">
       <button class="back-btn" data-back="home">&#8249; back</button>
@@ -127,7 +128,7 @@
     </div>
   </section>
 
-  
+  <!-- ===================== Persistent bottom nav (shown across all views) ===================== -->
   <nav class="tab-bar">
     <button class="nav-btn active" data-nav="home">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/></svg>
@@ -143,7 +144,7 @@
     </button>
   </nav>
 
-  
+  <!-- ===================== Detail bottom sheet (compact centered modal) ===================== -->
   <div id="detail-overlay" class="overlay hidden">
     <div class="sheet" id="detail-sheet">
       <div class="sheet-media">
@@ -171,9 +172,23 @@
       </div>
     </div>
   </div>
+
+  <!-- ===================== Set Join Link sheet (admin only) ===================== -->
+  <div id="link-overlay" class="overlay hidden">
+    <div class="sheet">
+      <div class="sheet-body">
+        <h3 class="sheet-title">Set Join Link</h3>
+        <input id="link-input" class="edit-link-input link-input-full" type="text"
+               placeholder="Join URL" autocomplete="off" />
+        <div class="btn-row">
+          <button id="link-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="link-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  
+  <!-- ===================== Report sheet ===================== -->
   <div id="report-overlay" class="overlay hidden">
     <div class="sheet">
       <div class="sheet-body">
