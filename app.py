@@ -121,11 +121,20 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_anidex(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     try:
-        text = Config.START_MSG.format(first_name=user.first_name, brand_name=Config.BRAND_NAME)
+        text = Config.START_MSG.format(
+            first_name=user.first_name or "there",
+            brand_name=Config.BRAND_NAME,
+        )
     except (KeyError, IndexError, ValueError):
         text = Config.START_MSG
-    text = f"\U0001f525 {count} people are demanding \"{title}\" — consider adding it!"
-    run_async(bot_app.bot.send_message(Config.LOG_CHANNEL_ID, text, reply_markup=keyboard))
+
+    keyboard = None
+    if Config.WEBAPP_URL:
+        keyboard = InlineKeyboardMarkup([[
+            _open_app_button(f"\U0001f4fa Open {Config.BRAND_NAME}")
+        ]])
+
+    await update.message.reply_text(text, reply_markup=keyboard)
 
 
 def verify_init_data(init_data: str) -> dict | None:
@@ -232,9 +241,9 @@ def api_trending():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_trending(page))
-    except requests.RequestException as exc:
-        app.logger.warning("AniList catalog request failed: %s", exc)
-        return jsonify({"results": [], "has_next": False})
+    except Exception as exc:
+        app.logger.exception("AniList catalog request failed")
+        return jsonify({"error": f"AniList catalog request failed: {exc}"}), 502
 
 
 @app.get("/api/catalog/popular")
@@ -242,9 +251,9 @@ def api_popular():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_popular(page))
-    except requests.RequestException as exc:
-        app.logger.warning("AniList catalog request failed: %s", exc)
-        return jsonify({"results": [], "has_next": False})
+    except Exception as exc:
+        app.logger.exception("AniList catalog request failed")
+        return jsonify({"error": f"AniList catalog request failed: {exc}"}), 502
 
 
 @app.get("/api/catalog/most-popular")
@@ -252,9 +261,9 @@ def api_most_popular():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_most_popular(page))
-    except requests.RequestException as exc:
-        app.logger.warning("AniList catalog request failed: %s", exc)
-        return jsonify({"results": [], "has_next": False})
+    except Exception as exc:
+        app.logger.exception("AniList catalog request failed")
+        return jsonify({"error": f"AniList catalog request failed: {exc}"}), 502
 
 
 @app.post("/api/search/track")
