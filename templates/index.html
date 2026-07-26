@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#111315" id="theme-color-meta" />
+  <meta name="theme-color" content="#f4f1e6" />
   <title>{{ brand_name }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -29,15 +29,12 @@
         <input id="search-input" class="search-input" type="text" placeholder="Search anime..." autocomplete="off" readonly />
       </div>
 
-
-
-      <!-- All / Available tabs -->
-      <div class="pill-tabs" id="home-tabs" role="tablist" aria-label="Anime sections">
-        <button class="pill-tab active" id="tab-all-btn" type="button" role="tab" aria-selected="true">All</button>
-        <button class="pill-tab" id="tab-available-btn" type="button" role="tab" aria-selected="false">Available</button>
+      <div class="pill-tabs">
+        <button class="pill-tab active" data-tab="all">All</button>
+        <button class="pill-tab" data-tab="library">Available</button>
       </div>
 
-      <!-- "All" tab: Trending + Top Airing + Popular -->
+      <!-- "All" tab: Trending + Top Airing -->
       <div id="tab-all">
         <section>
           <div class="section-header-row">
@@ -63,14 +60,14 @@
         </section>
       </div>
 
-      <!-- "Available" tab: local anime with an active Join Link -->
-      <section id="available-section" class="hidden">
+      <!-- "Available" tab: your posted library, browsable A–Z -->
+      <div id="tab-library" class="hidden">
         <div id="ad-slot" class="hidden"></div>
         <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available Anime</h2>
         <div id="letter-bar" class="letter-bar"></div>
         <div id="available-groups"></div>
         <p id="available-empty" class="empty-note hidden">No anime found.</p>
-      </section>
+      </div>
 
     </div>
   </main>
