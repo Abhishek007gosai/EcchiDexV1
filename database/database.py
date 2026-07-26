@@ -85,11 +85,30 @@ def _family_source_ids(source: str, start_related_ids: list[str]) -> set[str]:
     return seen
 
 
+def find_inherited_link(source: str, related_ids: list[str]) -> str | None:
+    """Look for a join link anywhere in the same franchise (walking the
+    full relation graph across already-posted entries). Standalone so it
+    can be checked *before* a title is saved — e.g. from /addpost, to
+    decide whether a brand-new post can be auto-linked immediately instead
+    of prompting the admin for a link at all."""
+    if not related_ids:
+        return None
+    family_ids = _family_source_ids(source, related_ids)
+    if not family_ids:
+        return None
+    related_doc = anime_col.find_one({
+        "source": source,
+        "source_id": {"$in": list(family_ids)},
+        "join_link": {"$nin": [None, ""]},
+    })
+    return related_doc["join_link"] if related_doc else None
+
+
 def upsert_anime(details: dict, added_by: int | None = None) -> int:
     """Insert a new catalog entry from a normalized source dict, or update
     the existing one if this (source, source_id) was already posted.
 
-    If this is a brand-new post and any other already-posted season in the
+    If this is a brand-new post and any other already-posted title in the
     same franchise (found by walking the full relation graph, not just
     this title's direct AniList relations) already has a join link set,
     the new post automatically inherits that same link — so adding
@@ -121,17 +140,7 @@ def upsert_anime(details: dict, added_by: int | None = None) -> int:
         anime_col.update_one({"_id": existing["_id"]}, {"$set": fields})
         return existing["_id"]
 
-    inherited_link = None
-    if related_ids:
-        family_ids = _family_source_ids(details["source"], related_ids)
-        if family_ids:
-            related_doc = anime_col.find_one({
-                "source": details["source"],
-                "source_id": {"$in": list(family_ids)},
-                "join_link": {"$nin": [None, ""]},
-            })
-            if related_doc:
-                inherited_link = related_doc["join_link"]
+    inherited_link = find_inherited_link(details["source"], related_ids)
 
     new_id = _next_id("anime")
     anime_col.insert_one({
@@ -150,23 +159,40 @@ def delete_anime(anime_id: int):
     anime_col.delete_one({"_id": anime_id})
 
 
+def delete_anime_family(anime_id: int) -> int:
+    """Delete anime_id and every other already-posted title in the same
+    franchise (seasons, OVAs, movies, spin-offs, etc. — found the same way
+    propagate_join_link finds them). Used when a join link is cleared: a
+    title with no link isn't a real post anymore, so it (and the rest of
+    the family, which loses the same link via propagation) is removed
+    from MongoDB entirely rather than left behind as an unlinked,
+    unjoinable entry. Returns how many *other* posts (besides anime_id
+    itself) were deleted."""
+    doc = anime_col.find_one({"_id": anime_id})
+    if not doc:
+        return 0
+    family_ids = _family_source_ids(doc["source"], doc.get("related_ids") or [])
+    family_ids.discard(str(doc["source_id"]))
+    other_count = 0
+    if family_ids:
+        result = anime_col.delete_many({"source": doc["source"], "source_id": {"$in": list(family_ids)}})
+        other_count = result.deleted_count
+    anime_col.delete_one({"_id": anime_id})
+    return other_count
+
+
 def get_anime(anime_id: int) -> dict | None:
     return _to_anime(anime_col.find_one({"_id": anime_id}))
 
 
 def list_available() -> list[dict]:
-    """Return only local anime that have a Join Link.
-
-    The All view uses the complete local/discovery catalog, while Available
-    is the subset that is actually joinable. Any anime added to the local
-    library is therefore still part of All, and becomes Available as soon
-    as a Join Link is set.
-    """
-    docs = (
-        anime_col.find({"join_link": {"$nin": [None, ""]}})
-        .collation({"locale": "en", "strength": 2})
-        .sort("title", ASCENDING)
-    )
+    """Every posted title in MongoDB. Since a title is only ever saved
+    once it has a join link (see upsert_anime/delete_anime_family), this
+    is effectively already "linked only" — but it's still the raw,
+    unfiltered query, used directly by admin bot commands (/editpost,
+    /delpost, /refreshposts) that need to find a post regardless of
+    anything the public-facing API layer additionally filters."""
+    docs = anime_col.find().collation({"locale": "en", "strength": 2}).sort("title", ASCENDING)
     return [_to_anime(d) for d in docs]
 
 
@@ -187,13 +213,15 @@ def update_link(anime_id: int, link: str):
 
 
 def propagate_join_link(anime_id: int, link: str) -> int:
-    """After setting anime_id's join link, apply the same link to every
-    other already-posted season in the same franchise — found by walking
-    the AniList franchise relation graph across posted entries, so
-    the whole family picks up the link, not just anime_id's immediate
-    neighbors. Returns how many other posts were updated."""
-    if not link:
-        return 0
+    """After setting (or clearing) anime_id's join link, apply the same
+    value to every other already-posted title in the same franchise —
+    found by walking the AniList franchise relation graph across posted
+    entries, so the whole family (seasons, OVAs, movies, spin-offs, etc.)
+    stays in sync either way: a link set anywhere reaches the rest of the
+    family, and clearing a link anywhere clears it everywhere too, so a
+    removed post also disappears from the "Available" tab across the
+    board rather than leaving stale linked entries behind. Returns how
+    many other posts were updated."""
     doc = anime_col.find_one({"_id": anime_id})
     if not doc:
         return 0
@@ -203,7 +231,7 @@ def propagate_join_link(anime_id: int, link: str) -> int:
         return 0
     result = anime_col.update_many(
         {"source": doc["source"], "source_id": {"$in": list(family_ids)}},
-        {"$set": {"join_link": link, "updated_at": time.time()}},
+        {"$set": {"join_link": link or None, "updated_at": time.time()}},
     )
     return result.modified_count
 
@@ -213,24 +241,22 @@ def propagate_join_link(anime_id: int, link: str) -> int:
 # ---------------------------------------------------------------------------
 
 def get_or_create_user(telegram_id: int, username: str | None, first_name: str | None,
-                        is_admin: bool, last_name: str | None = None, photo_url: str | None = None) -> dict:
+                        is_admin: bool) -> dict:
     role = "admin" if is_admin else "member"
     existing = users_col.find_one({"_id": telegram_id})
 
     if existing:
         users_col.update_one(
             {"_id": telegram_id},
-            {"$set": {"username": username, "first_name": first_name, "last_name": last_name,
-                      "photo_url": photo_url, "role": role}},
+            {"$set": {"username": username, "first_name": first_name, "role": role}},
         )
-        existing.update(username=username, first_name=first_name, last_name=last_name, photo_url=photo_url, role=role)
+        existing.update(username=username, first_name=first_name, role=role)
         existing["telegram_id"] = existing.pop("_id")
         return existing
 
     now = time.time()
     doc = {
         "_id": telegram_id, "username": username, "first_name": first_name,
-        "last_name": last_name, "photo_url": photo_url,
         "role": role, "access": "active", "registered_at": now,
     }
     users_col.insert_one(dict(doc))
