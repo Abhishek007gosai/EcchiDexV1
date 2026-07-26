@@ -1065,6 +1065,32 @@ html[data-theme="dark"] .available-card {
   box-shadow: 0 4px 18px rgba(0,0,0,.18);
 }
 
+
+/* ---------------- Dark theme ---------------- */
+html[data-theme="dark"] body,
+html[data-theme="dark"] #app-view,
+html[data-theme="dark"] #search-view,
+html[data-theme="dark"] #genre-view,
+html[data-theme="dark"] #profile-view {
+  background: var(--bg);
+  color: var(--text);
+}
+html[data-theme="dark"] .icon-btn,
+html[data-theme="dark"] .pill-tabs,
+html[data-theme="dark"] .subview-topbar {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .search-input {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .search-input::placeholder {
+  color: var(--text-faint);
+}
+
 /* ---------------- enhanced profile ---------------- */
 .profile-card { overflow: hidden; }
 .profile-card-main { margin-bottom: 24px; }

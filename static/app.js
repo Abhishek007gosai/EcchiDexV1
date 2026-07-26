@@ -2,7 +2,7 @@
   "use strict";
 
   const brandName = document.body.dataset.brand || "Anime Eternals";
-  document.documentElement.dataset.theme = localStorage.getItem("touka-theme") === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = localStorage.getItem("touka-theme") || "dark";
 
   // ---------------------------------------------------------------------
   // Telegram WebApp bootstrap (no-ops gracefully outside Telegram)
@@ -12,7 +12,7 @@
     try {
       tg.ready();
       tg.expand();
-      const savedTheme = localStorage.getItem("touka-theme") || "light";
+      const savedTheme = localStorage.getItem("touka-theme") || "dark";
       tg.setHeaderColor && tg.setHeaderColor(savedTheme === "dark" ? "#111315" : "#f4f1e6");
       tg.setBackgroundColor && tg.setBackgroundColor(savedTheme === "dark" ? "#111315" : "#f4f1e6");
     } catch (e) { /* not fatal */ }
@@ -1262,7 +1262,7 @@
       document.querySelectorAll(".theme-option").forEach((option) => {
         option.addEventListener("click", () => applyTheme(option.dataset.themeOption));
       });
-      applyTheme(localStorage.getItem("touka-theme") || "light");
+      applyTheme(localStorage.getItem("touka-theme") || "dark");
     } catch (err) {
       profileCard.innerHTML = `<p class="profile-hint">${escapeHtml(err.message || "Open this from inside Telegram to view your profile.")}</p>`;
     }
