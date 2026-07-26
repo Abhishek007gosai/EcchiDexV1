@@ -213,22 +213,24 @@ def propagate_join_link(anime_id: int, link: str) -> int:
 # ---------------------------------------------------------------------------
 
 def get_or_create_user(telegram_id: int, username: str | None, first_name: str | None,
-                        is_admin: bool) -> dict:
+                        is_admin: bool, last_name: str | None = None, photo_url: str | None = None) -> dict:
     role = "admin" if is_admin else "member"
     existing = users_col.find_one({"_id": telegram_id})
 
     if existing:
         users_col.update_one(
             {"_id": telegram_id},
-            {"$set": {"username": username, "first_name": first_name, "role": role}},
+            {"$set": {"username": username, "first_name": first_name, "last_name": last_name,
+                      "photo_url": photo_url, "role": role}},
         )
-        existing.update(username=username, first_name=first_name, role=role)
+        existing.update(username=username, first_name=first_name, last_name=last_name, photo_url=photo_url, role=role)
         existing["telegram_id"] = existing.pop("_id")
         return existing
 
     now = time.time()
     doc = {
         "_id": telegram_id, "username": username, "first_name": first_name,
+        "last_name": last_name, "photo_url": photo_url,
         "role": role, "access": "active", "registered_at": now,
     }
     users_col.insert_one(dict(doc))
