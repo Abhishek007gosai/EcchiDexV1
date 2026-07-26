@@ -232,7 +232,8 @@ def api_trending():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_trending(page))
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        app.logger.warning("AniList catalog request failed: %s", exc)
         return jsonify({"results": [], "has_next": False})
 
 
@@ -241,7 +242,8 @@ def api_popular():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_popular(page))
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        app.logger.warning("AniList catalog request failed: %s", exc)
         return jsonify({"results": [], "has_next": False})
 
 
@@ -250,7 +252,8 @@ def api_most_popular():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_most_popular(page))
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        app.logger.warning("AniList catalog request failed: %s", exc)
         return jsonify({"results": [], "has_next": False})
 
 
