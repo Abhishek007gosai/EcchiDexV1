@@ -73,3 +73,10 @@ class Config:
     # How long (seconds) trending/popular results are cached in memory
     # before being re-fetched from AniList.
     CATALOG_CACHE_TTL = int(os.environ.get("CATALOG_CACHE_TTL", "600"))
+
+    # Ceiling on outgoing AniList requests per minute, shared process-wide
+    # (see plugins/anilist.py's rate limiter). AniList's documented limit
+    # is normally 90/min but it drops as low as 30/min during its
+    # periodic "degraded" states, so we stay well under either rather
+    # than assume the higher number and get 429'd.
+    ANILIST_RATE_LIMIT_PER_MINUTE = int(os.environ.get("ANILIST_RATE_LIMIT_PER_MINUTE", "25"))

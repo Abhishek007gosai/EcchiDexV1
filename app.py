@@ -20,6 +20,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import time
@@ -31,6 +32,8 @@ from flask import Flask, abort, jsonify, render_template, request
 from config import Config
 from database import database as db
 from plugins import SOURCES
+
+logger = logging.getLogger(__name__)
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import (
@@ -362,7 +365,8 @@ def api_trending():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_trending(page))
-    except requests.RequestException:
+    except Exception:
+        logger.exception("Failed to load AniList trending (page %s)", page)
         return jsonify({"results": [], "has_next": False})
 
 
@@ -371,7 +375,8 @@ def api_popular():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_popular(page))
-    except requests.RequestException:
+    except Exception:
+        logger.exception("Failed to load AniList top-airing (page %s)", page)
         return jsonify({"results": [], "has_next": False})
 
 
@@ -380,7 +385,8 @@ def api_most_popular():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_most_popular(page))
-    except requests.RequestException:
+    except Exception:
+        logger.exception("Failed to load AniList most-popular (page %s)", page)
         return jsonify({"results": [], "has_next": False})
 
 
@@ -437,7 +443,8 @@ def api_search_anime():
         return jsonify({"results": [], "has_next": False})
     try:
         return jsonify(SOURCES["anilist"].search(q, page))
-    except requests.RequestException:
+    except Exception:
+        logger.exception("Failed to search AniList for %r (page %s)", q, page)
         return jsonify({"results": [], "has_next": False})
 
 
@@ -446,7 +453,8 @@ def api_genre_browse(genre):
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].browse_genre(genre, page))
-    except requests.RequestException:
+    except Exception:
+        logger.exception("Failed to browse AniList genre %r (page %s)", genre, page)
         return jsonify({"results": [], "has_next": False})
 
 
@@ -481,7 +489,8 @@ def api_anilist_details(anilist_id):
     the lightweight discovery query doesn't include those fields."""
     try:
         return jsonify(SOURCES["anilist"].get_details(anilist_id))
-    except requests.RequestException:
+    except Exception:
+        logger.exception("Failed to load AniList details for id %s", anilist_id)
         abort(502)
 
 
@@ -578,7 +587,8 @@ def api_set_link_from_anilist(anilist_id):
         return jsonify(error=str(e)), 400
     try:
         details = SOURCES["anilist"].get_details(anilist_id)
-    except requests.RequestException:
+    except Exception:
+        logger.exception("Failed to fetch AniList details for id %s while linking", anilist_id)
         return jsonify(error="Couldn't fetch details from AniList right now."), 502
     anime_id = db.upsert_anime(details, added_by=user["id"])
     db.update_link(anime_id, link)
