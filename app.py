@@ -424,7 +424,6 @@ def build_bot_app() -> Application | None:
     application = Application.builder().token(Config.BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("anidex", cmd_anidex))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_search))
     return application
 
 
