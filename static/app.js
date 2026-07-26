@@ -746,9 +746,13 @@
   el("link-cancel").addEventListener("click", closeLinkSheet);
   linkOverlay.addEventListener("click", (e) => { if (e.target === linkOverlay) closeLinkSheet(); });
 
-  el("link-save").addEventListener("click", async () => {
-    if (!linkTargetAnime) return;
+  const linkSaveBtn = el("link-save");
+  linkSaveBtn.addEventListener("click", async () => {
+    if (!linkTargetAnime || linkSaveBtn.disabled) return;
     const value = linkInput.value.trim();
+    linkSaveBtn.disabled = true;
+    const originalLabel = linkSaveBtn.textContent;
+    linkSaveBtn.textContent = "Saving…";
     try {
       let result;
       if (linkTargetAnime.id) {
@@ -794,6 +798,9 @@
       await loadAvailable();
     } catch (err) {
       showToast(err.message || "Couldn't save link");
+    } finally {
+      linkSaveBtn.disabled = false;
+      linkSaveBtn.textContent = originalLabel;
     }
   });
 
