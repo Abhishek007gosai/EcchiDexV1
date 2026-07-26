@@ -183,6 +183,10 @@ def get_anime(anime_id: int) -> dict | None:
     return _to_anime(anime_col.find_one({"_id": anime_id}))
 
 
+def find_by_source_id(source: str, source_id: str) -> dict | None:
+    return _to_anime(anime_col.find_one({"source": source, "source_id": str(source_id)}))
+
+
 def list_available() -> list[dict]:
     """Every posted title in MongoDB. Since a title is only ever saved
     once it has a join link (see upsert_anime/delete_anime_family), this
