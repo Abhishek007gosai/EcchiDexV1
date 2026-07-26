@@ -70,7 +70,9 @@ query ($sort: [MediaSort], $page: Int) {
 }
 """
 
-
+# Same shape as DISCOVER_QUERY, but restricted to anime that is actually
+# still airing right now — used for the "Top Airing" feed so finished
+# shows (e.g. Death Note) don't show up just because they're popular.
 DISCOVER_AIRING_QUERY = """
 query ($sort: [MediaSort], $page: Int) {
   Page(page: $page, perPage: 10) {
@@ -121,11 +123,11 @@ class AniListSource(AnimeSource):
         self._cache: dict[str, tuple[float, dict]] = {}
 
     def _post(self, query: str, variables: dict) -> dict:
-        
-        
-        
-        
-        
+        # AniList's public API rate-limits aggressively. When several
+        # requests land in the same burst (e.g. fetching all genre
+        # thumbnails in parallel), a few commonly come back 429. Retry
+        # those with a short backoff instead of surfacing a failure for
+        # what's really just "try again in a moment".
         last_exc = None
         for attempt in range(3):
             resp = requests.post(
@@ -140,22 +142,7 @@ class AniListSource(AnimeSource):
                 time.sleep(delay)
                 continue
             resp.raise_for_status()
-            payload = resp.json()
-            if payload.get("errors"):
-                messages = "; ".join(
-                    str(err.get("message", "AniList GraphQL error"))
-                    for err in payload["errors"]
-                )
-                raise requests.HTTPError(
-                    f"AniList GraphQL error: {messages}",
-                    response=resp,
-                )
-            if "data" not in payload:
-                raise requests.HTTPError(
-                    "AniList returned no data",
-                    response=resp,
-                )
-            return payload["data"]
+            return resp.json()["data"]
         raise last_exc
 
     def search(self, query: str, page: int = 1) -> dict:
@@ -187,13 +174,13 @@ class AniListSource(AnimeSource):
         if alt_title == main_title:
             alt_title = None
 
-        
-        
-        
-        
-        
-        
-        
+        # Every relation type that's still genuinely "this anime" (another
+        # season, an OVA/movie tied to the story, a spin-off, an alternate
+        # cut/compilation) — not just direct prequel/sequel — so a join
+        # link set anywhere propagates across the whole franchise. Left out
+        # on purpose: ADAPTATION (source manga/novel), CHARACTER (unrelated
+        # series that merely shares a guest character), and OTHER (too
+        # loose — often crossovers with no real franchise connection).
         SAME_FRANCHISE_RELATIONS = {
             "PREQUEL", "SEQUEL", "SIDE_STORY", "PARENT",
             "ALTERNATIVE", "SPIN_OFF", "SUMMARY", "COMPILATION", "CONTAINS",
@@ -222,7 +209,7 @@ class AniListSource(AnimeSource):
             "related_ids": related_ids,
         }
 
-    
+    # -- Extra: powers Home's Trending/Top Airing feeds (not part of the shared interface) --
 
     def _cached(self, key: str, fetch):
         now = time.time()
@@ -256,13 +243,13 @@ class AniListSource(AnimeSource):
         return self._discover("TRENDING_DESC", page)
 
     def get_popular(self, page: int = 1) -> dict:
-        
-        
+        # Backs the "Top Airing" section — must only include anime that is
+        # currently releasing, not just anime that is popular overall.
         return self._discover("POPULARITY_DESC", page, query=DISCOVER_AIRING_QUERY, cache_prefix="airing:")
 
     def get_most_popular(self, page: int = 1) -> dict:
-        
-        
+        # Backs the "Popular" section — most popular anime overall,
+        # regardless of airing status (unlike get_popular/"Top Airing").
         return self._discover("POPULARITY_DESC", page, cache_prefix="popular-all:")
 
     def browse_genre(self, genre: str, page: int = 1) -> dict:
