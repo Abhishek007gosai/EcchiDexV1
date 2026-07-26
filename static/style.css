@@ -26,6 +26,7 @@ html, body {
 
 .hidden { display: none !important; }
 
+/* ---------------- layout ---------------- */
 
 #app-view {
   display: flex;
@@ -87,6 +88,7 @@ html, body {
   cursor: pointer;
 }
 
+/* ---------------- search ---------------- */
 
 .search-row {
   position: relative;
@@ -122,6 +124,7 @@ html, body {
 .search-input::placeholder { color: var(--text-faint); }
 .search-input[readonly] { cursor: pointer; caret-color: transparent; }
 
+/* ---------------- pill tabs (All / Available) ---------------- */
 
 .pill-tabs {
   display: flex;
@@ -150,6 +153,7 @@ html, body {
   color: #fff;
 }
 
+/* ---------------- sections ---------------- */
 
 .section-header-row {
   display: flex;
@@ -174,7 +178,7 @@ html, body {
   flex: none;
 }
 
-
+/* Distinct accent colors per section so headings aren't all identical */
 .section-header--trending .accent-bar { background: var(--amber); }
 .section-header--airing .accent-bar { background: var(--hot); }
 .section-header--available .accent-bar { background: var(--green-dark); }
@@ -213,6 +217,7 @@ html, body {
   padding: 16px;
 }
 
+/* ---------------- poster card (Trending Now) ---------------- */
 
 .poster-card {
   position: relative;
@@ -295,6 +300,7 @@ html, body {
   padding: 40px 0;
 }
 
+/* ---------------- Popular grid (2-column, reuses poster-card) ---------------- */
 
 .popular-grid {
   display: grid;
@@ -350,6 +356,7 @@ html, body {
   border-radius: 6px;
 }
 
+/* ---------------- genre chips (Home) + genre tiles (Search) ---------------- */
 
 .genre-tile-grid {
   display: grid;
@@ -383,6 +390,7 @@ html, body {
 
 .genre-tile-name { color: var(--text); font-size: 14px; font-weight: 700; }
 
+/* ---------------- letter bar ---------------- */
 
 .letter-bar {
   display: flex;
@@ -425,6 +433,7 @@ html, body {
 .available-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .available-grid .poster-card img { height: 208px; }
 
+/* ---------------- bottom nav ---------------- */
 
 .tab-bar {
   display: flex;
@@ -469,6 +478,7 @@ html, body {
   color: var(--green);
 }
 
+/* ---------------- sub-views (Search / Genre / Profile) ---------------- */
 
 #search-view, #genre-view, #profile-view {
   min-height: 100dvh;
@@ -544,6 +554,7 @@ html, body {
 .popular-search-text { flex: 1; font-size: 13.5px; }
 .popular-search-arrow { color: var(--text-faint); font-size: 13px; }
 
+/* ---------------- profile ---------------- */
 
 .profile-card {
   background: var(--surface);
@@ -592,6 +603,7 @@ html, body {
 .profile-row .label { color: var(--text-dim); }
 .profile-row .value { font-family: inherit; }
 
+/* ---------------- overlays / compact centered modal ---------------- */
 
 .overlay {
   position: fixed;
@@ -641,7 +653,11 @@ html, body {
   display: block;
 }
 
-
+/* Portrait poster standing in for a missing wide banner. A hard cover-crop
+   on a tall image inside this short, wide box zooms in on a random sliver
+   (usually just the eyes) and loses the rest of the artwork. Instead, blur
+   the poster to fill the box as a backdrop, and show the full poster
+   uncropped on top of it. */
 .sheet-media.has-blur-bg::before {
   content: "";
   position: absolute;
@@ -895,6 +911,7 @@ html, body {
 
 .link-input-full { width: 100%; margin-bottom: 16px; padding: 12px 14px; }
 
+/* ---------------- report sheet ---------------- */
 
 .reason-list {
   display: flex;
@@ -935,8 +952,18 @@ html, body {
   margin-bottom: 14px;
 }
 
+/* ---------------- ad slot (Available/library tab) ---------------- */
 
-
+.ad-card {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  margin-bottom: 20px;
+  height: 150px;
+  background: var(--surface-2);
+  border: 1px solid var(--green-dark);
+}
 
 .ad-card img,
 .ad-card .generated-thumb {
@@ -946,7 +973,18 @@ html, body {
   display: block;
 }
 
-
+.ad-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--grad);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
 
 .ad-caption-wrap {
   position: absolute;
@@ -955,8 +993,18 @@ html, body {
   background: linear-gradient(to top, rgba(0,0,0,0.92), transparent);
 }
 
+.ad-caption-summary {
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
-
+/* ---------------- toast ---------------- */
 
 .toast {
   position: fixed;

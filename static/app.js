@@ -3,9 +3,9 @@
 
   const brandName = document.body.dataset.brand || "Anime Eternals";
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Telegram WebApp bootstrap (no-ops gracefully outside Telegram)
+  // ---------------------------------------------------------------------
   const tg = window.Telegram && window.Telegram.WebApp;
   if (tg) {
     try {
@@ -13,7 +13,7 @@
       tg.expand();
       tg.setHeaderColor && tg.setHeaderColor("#f4f1e6");
       tg.setBackgroundColor && tg.setBackgroundColor("#f4f1e6");
-    } catch (e) {  }
+    } catch (e) { /* not fatal */ }
   }
   const initData = tg ? tg.initData : "";
 
@@ -45,10 +45,10 @@
     };
   }
 
-  
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Generated placeholder thumbnail — used whenever an image is missing
+  // or fails to load, so nothing ever shows a broken image icon.
+  // ---------------------------------------------------------------------
   function hashStr(str) {
     let h = 0;
     for (let i = 0; i < (str || "").length; i++) {
@@ -88,9 +88,9 @@
     container.appendChild(img);
   }
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Elements
+  // ---------------------------------------------------------------------
   const el = (id) => document.getElementById(id);
 
   const appView = el("app-view");
@@ -128,6 +128,7 @@
   const letterBar = el("letter-bar");
   const availableGroups = el("available-groups");
   const availableEmpty = el("available-empty");
+  const adSlot = el("ad-slot");
 
   const navBtns = document.querySelectorAll(".nav-btn");
 
@@ -161,9 +162,9 @@
     toastTimer = setTimeout(() => toast.classList.add("hidden"), 2200);
   }
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------
   let trending = [];
   let popular = [];
   let popularPage = 1;
@@ -173,15 +174,16 @@
   let mostPopularHasNext = false;
   let mostPopularLoading = false;
   let available = [];
+  let activeAd = null;
   let activeLetter = null;
   let libraryQuery = "";
   let profile = null;
 
   const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-  
-  
-  
-  
+  // "#" comes first, same convention as Spotify/Apple Music/contacts apps,
+  // and catches anything starting with a digit — e.g. "86 -Eighty Six-",
+  // "5 Centimeters per Second", "009-1" — which would otherwise not match
+  // any A-Z button and become an orphaned, unreachable group.
   const INDEX_KEYS = ["#", ...ALL_LETTERS];
 
   function indexKeyFor(title) {
@@ -190,13 +192,13 @@
   }
 
   function buildAvailableIndex() {
-    
-    
-    
-    
-    
-    
-    
+    // Matching purely by title text (the old approach) silently breaks
+    // whenever the posted library entry's title and the AniList discovery
+    // feed's title differ even slightly — different EN/romaji preference,
+    // punctuation, a manually edited title, etc. — so a join link you just
+    // added shows up in "Available" but the same anime in "All" still
+    // looks unlinked. AniList ids are stable, so prefer matching on that
+    // and only fall back to title text when an id isn't available.
     const byId = new Map();
     const byTitle = new Map();
     available.forEach((a) => {
@@ -216,9 +218,9 @@
     };
   }
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Top-level navigation (Home / Search / Profile)
+  // ---------------------------------------------------------------------
   function showView(name) {
     Object.entries(allViews).forEach(([key, node]) => node.classList.toggle("hidden", key !== name));
     navBtns.forEach((b) => b.classList.toggle("active", b.dataset.nav === (name === "app" ? "home" : name)));
@@ -239,16 +241,16 @@
     });
   });
 
-  
+  // Home's own search field is a shortcut into the dedicated Search page.
   homeSearchInput.addEventListener("click", () => {
     showView("search");
     renderSearchLanding();
     setTimeout(() => searchViewInput.focus(), 50);
   });
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Poster / card builders
+  // ---------------------------------------------------------------------
   function simplePosterCard(item, onOpen) {
     const card = document.createElement("div");
     card.className = "poster-card";
@@ -341,9 +343,9 @@
     return !libraryQuery || title.toLowerCase().includes(libraryQuery.toLowerCase());
   }
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Render: Home "All" tab — Trending, Top Airing (+ Load more)
+  // ---------------------------------------------------------------------
   function renderTrending() {
     trendingRow.innerHTML = "";
     const availIndex = buildAvailableIndex();
@@ -382,8 +384,8 @@
     popularLoading = false;
   }
 
-  
-  
+  // Auto-load more Popular anime as the Home tab is scrolled, instead of
+  // making the user tap a button.
   scrollArea.addEventListener("scroll", debounce(() => {
     if (tabAll.classList.contains("hidden")) return;
     const nearBottom = scrollArea.scrollTop + scrollArea.clientHeight > scrollArea.scrollHeight - 400;
@@ -422,9 +424,9 @@
 
   popularGridLoadMoreBtn.addEventListener("click", loadMorePopularGrid);
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Pill tabs: All (discovery) / Available (posted library)
+  // ---------------------------------------------------------------------
   function setPillTab(tab) {
     pillTabs.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
     tabAll.classList.toggle("hidden", tab !== "all");
@@ -433,9 +435,9 @@
   }
   pillTabs.forEach((b) => b.addEventListener("click", () => setPillTab(b.dataset.tab)));
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Render: Available/library tab (posted catalog, A–Z)
+  // ---------------------------------------------------------------------
   function lettersWithData() {
     return new Set(available.map((a) => indexKeyFor(a.title)));
   }
@@ -496,16 +498,55 @@
     });
   }
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Ad slot (Available/library tab only)
+  // ---------------------------------------------------------------------
+  function renderAdSlot() {
+    adSlot.innerHTML = "";
+    if (!activeAd) {
+      adSlot.classList.add("hidden");
+      return;
+    }
+    adSlot.classList.remove("hidden");
 
+    const card = document.createElement("div");
+    card.className = "ad-card";
+    thumbImg(card, activeAd.image_url, "Ad");
 
-  
-  
-  
+    const badge = document.createElement("span");
+    badge.className = "ad-badge";
+    badge.textContent = "AD";
+    card.appendChild(badge);
+
+    const wrap = document.createElement("div");
+    wrap.className = "ad-caption-wrap";
+    const summary = document.createElement("p");
+    summary.className = "ad-caption-summary";
+    summary.textContent = activeAd.caption;
+    wrap.appendChild(summary);
+    card.appendChild(wrap);
+
+    card.addEventListener("click", openAdDetail);
+    adSlot.appendChild(card);
+  }
+
+  function openAdDetail() {
+    if (!activeAd) return;
+    api("/api/ads/tap", { method: "POST" }).catch(() => {});
+    openDetailSheet({
+      title: "Sponsored",
+      description: activeAd.caption,
+      genres: [],
+      poster_url: activeAd.image_url,
+      link: activeAd.link,
+    }, "ad");
+  }
+
+  // ---------------------------------------------------------------------
+  // Detail sheet (compact centered modal)
+  // ---------------------------------------------------------------------
   let currentDetail = null;
-  let currentContext = null; 
+  let currentContext = null; // "available" | "discover" | "ad" | "genre"
   let descriptionExpanded = false;
 
   function openDetailSheet(anime, context) {
@@ -518,22 +559,22 @@
     const hasRealBanner = !!anime.banner_url;
     const bannerSrc = anime.banner_url || anime.poster_url;
 
-    
-    
-    
-    
-    
-    
-    
+    // openDiscoverDetail (and friends) call this twice per tap: once
+    // immediately with placeholder data, then again once the full AniList
+    // details resolve. When it's the same artwork both times, skip
+    // re-doing the poster/blurred-backdrop work below — reloading the
+    // image and re-rasterizing the blur filter on every follow-up call is
+    // what made back-to-back opens feel janky, since the browser did that
+    // heavy repaint work even though nothing visually needed to change.
     if (bannerSrc !== prevBannerSrc) {
       sheetMedia.querySelectorAll(".generated-thumb").forEach((n) => n.remove());
       detailPoster.src = "";
       detailPoster.style.display = "";
-      
-      
-      
-      
-      
+      // A true banner is already wide, so a centered cover-crop looks right.
+      // A portrait poster forced into that same short, wide box can't be
+      // cover-cropped without zooming in hard and losing most of the art
+      // (usually landing on a jarring close-up of just the eyes). Instead,
+      // show it uncropped over a blurred version of itself as a backdrop.
       detailPoster.classList.toggle("poster-fallback", !hasRealBanner);
       sheetMedia.classList.toggle("has-blur-bg", !hasRealBanner && !!bannerSrc);
       if (!hasRealBanner && bannerSrc) {
@@ -629,7 +670,7 @@
         clickBtn.className = "btn btn-primary";
         clickBtn.textContent = context === "ad" ? "Click Here" : "Open Link";
         clickBtn.addEventListener("click", () => {
-
+          if (context === "ad") api("/api/ads/click", { method: "POST" }).catch(() => {});
           if (tg && tg.openLink) tg.openLink(anime.link);
           else window.open(anime.link, "_blank");
         });
@@ -671,11 +712,20 @@
         row.appendChild(voteBtn);
       }
 
+      if (profile && profile.role === "admin" && anime.anilist_id) {
+        const plus = document.createElement("button");
+        plus.className = "plus-btn";
+        plus.textContent = "+";
+        plus.setAttribute("aria-label", "Set join link");
+        plus.addEventListener("click", () => openLinkSheet(anime));
+        row.appendChild(plus);
+      }
+
       detailActionArea.appendChild(row);
       return;
     }
 
-    
+    // context === "available"
     const row = document.createElement("div");
     row.className = "action-row";
 
@@ -694,6 +744,15 @@
       comingSoon.textContent = "Coming Soon";
       comingSoon.disabled = true;
       row.appendChild(comingSoon);
+    }
+
+    if (profile && profile.role === "admin" && anime.id) {
+      const plus = document.createElement("button");
+      plus.className = "plus-btn";
+      plus.textContent = "+";
+      plus.setAttribute("aria-label", "Set join link");
+      plus.addEventListener("click", () => openLinkSheet(anime));
+      row.appendChild(plus);
     }
 
     detailActionArea.appendChild(row);
@@ -730,10 +789,79 @@
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Set Join Link sheet (admin only)
+  // ---------------------------------------------------------------------
+  let linkTargetAnime = null;
 
-  
-  
-  
+  function openLinkSheet(anime) {
+    linkTargetAnime = anime;
+    linkInput.value = anime.join_link || "";
+    linkOverlay.classList.remove("hidden");
+    linkInput.focus();
+  }
+  function closeLinkSheet() {
+    linkOverlay.classList.add("hidden");
+    linkTargetAnime = null;
+  }
+  el("link-cancel").addEventListener("click", closeLinkSheet);
+  linkOverlay.addEventListener("click", (e) => { if (e.target === linkOverlay) closeLinkSheet(); });
+
+  el("link-save").addEventListener("click", async () => {
+    if (!linkTargetAnime) return;
+    const value = linkInput.value.trim();
+    try {
+      let result;
+      if (linkTargetAnime.id) {
+        result = await api(`/api/anime/${linkTargetAnime.id}/link`, { method: "PATCH", body: JSON.stringify({ link: value }) });
+        if (result.status === "deleted") {
+          // No link = the post itself (and any related title that only
+          // had this same link) was deleted from the database, not just
+          // hidden — so close out of it rather than trying to re-render
+          // detail actions for an anime that no longer exists.
+          closeLinkSheet();
+          closeDetailSheet();
+          showToast(result.propagated
+            ? `Removed — no join link was set (also removed ${result.propagated} related title(s))`
+            : "Removed — no join link was set");
+          await loadAvailable();
+          return;
+        }
+        linkTargetAnime.join_link = value;
+        if (currentDetail && currentDetail.id === linkTargetAnime.id) {
+          currentDetail.join_link = value;
+        }
+      } else {
+        // Not in the local library yet (Discover/Genre post) — this creates
+        // the library entry with the link already set, same result as
+        // Set Join Link in one step.
+        result = await api(`/api/anime/link-anilist/${linkTargetAnime.anilist_id}`, {
+          method: "POST",
+          body: JSON.stringify({ link: value }),
+        });
+        linkTargetAnime.id = result.anime.id;
+        linkTargetAnime.join_link = result.anime.join_link;
+        linkTargetAnime.matchedJoinLink = result.anime.join_link;
+        if (currentDetail && currentDetail.anilist_id === linkTargetAnime.anilist_id) {
+          currentDetail.id = result.anime.id;
+          currentDetail.join_link = result.anime.join_link;
+          currentDetail.matchedJoinLink = result.anime.join_link;
+        }
+      }
+      if (currentDetail) renderDetailAction(currentDetail, currentContext);
+      closeLinkSheet();
+      showToast(result.propagated
+        ? `Link saved — applied to ${result.propagated} related title(s) too`
+        : "Link saved");
+      await loadAvailable();
+    } catch (err) {
+      showToast(err.message || "Couldn't save link");
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Report sheet
+  // ---------------------------------------------------------------------
   reportOpenBtn.addEventListener("click", () => {
     selectedReason = null;
     reportDetails.value = "";
@@ -769,9 +897,9 @@
     }
   });
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Search page
+  // ---------------------------------------------------------------------
   const GENRES = ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Romance", "Sci-Fi", "Horror"];
 
   function renderSearchLanding() {
@@ -788,7 +916,7 @@
     let items = [];
     try {
       items = await api("/api/search/popular?limit=6");
-    } catch (err) {  }
+    } catch (err) { /* silently empty */ }
     items.forEach((item) => {
       const row = document.createElement("div");
       row.className = "popular-search-row";
@@ -808,7 +936,7 @@
     let items = [];
     try {
       items = await api("/api/search/recent?limit=10");
-    } catch (err) {  }
+    } catch (err) { /* silently empty */ }
     recentSearchSection.classList.toggle("hidden", items.length === 0);
     items.forEach((item) => {
       const row = document.createElement("div");
@@ -963,11 +1091,11 @@
     searchLoading = true;
     try {
       const data = await api(`/api/search/anime?q=${encodeURIComponent(query)}&page=1`);
-      if (myToken !== searchToken) return; 
+      if (myToken !== searchToken) return; // a newer search superseded this one
       searchHasNext = data.has_next;
       const localTitles = new Set(localMatches.map((a) => a.title.toLowerCase()));
       data.results.forEach((item) => {
-        if (localTitles.has(item.title.toLowerCase())) return; 
+        if (localTitles.has(item.title.toLowerCase())) return; // already shown above
         const matched = byTitle.get(item.title.toLowerCase());
         item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
         searchResultsGroups.appendChild(searchResultRow(item, () => {
@@ -997,13 +1125,13 @@
         item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
         searchResultsGroups.appendChild(searchResultRow(item, () => openDiscoverDetail(item)));
       });
-    } catch (err) {  }
+    } catch (err) { /* stop silently, user can keep scrolling to retry */ }
     searchLoading = false;
   }
 
   searchViewInput.addEventListener("input", debounce((e) => runLibrarySearch(e.target.value), 350));
 
-  
+  // Infinite scroll: the Search subview scrolls the document itself.
   window.addEventListener("scroll", debounce(() => {
     if (searchView.classList.contains("hidden") || searchResults.classList.contains("hidden")) return;
     const nearBottom = window.scrollY + window.innerHeight > document.documentElement.scrollHeight - 400;
@@ -1016,9 +1144,9 @@
     return div.innerHTML;
   }
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Genre browse view
+  // ---------------------------------------------------------------------
   let genreViewName = "";
   let genrePage = 1;
   let genreHasNext = false;
@@ -1052,7 +1180,7 @@
       data.results.forEach((item) => {
         genreBrowseGrid.appendChild(simplePosterCard(item, () => openGenreItemDetail(item)));
       });
-    } catch (err) {  }
+    } catch (err) { /* stop silently, user can keep scrolling to retry */ }
     genreLoading = false;
   }
 
@@ -1062,9 +1190,9 @@
     if (nearBottom) loadMoreGenre();
   }, 150));
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Profile
+  // ---------------------------------------------------------------------
   function initials(name) {
     return (name || "?").trim().charAt(0).toUpperCase();
   }
@@ -1092,9 +1220,9 @@
     }
   }
 
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Data loading
+  // ---------------------------------------------------------------------
   async function loadDiscover() {
     try {
       const [trendingData, popularData, mostPopularData] = await Promise.all([
@@ -1102,12 +1230,12 @@
         api("/api/catalog/popular"),
         api("/api/catalog/most-popular"),
       ]);
-      trending = Array.isArray(trendingData.results) ? trendingData.results : [];
-      popular = Array.isArray(popularData.results) ? popularData.results : [];
-      popularHasNext = !!popularData.has_next;
+      trending = trendingData.results;
+      popular = popularData.results;
+      popularHasNext = popularData.has_next;
       popularPage = 1;
-      mostPopular = Array.isArray(mostPopularData.results) ? mostPopularData.results : [];
-      mostPopularHasNext = !!mostPopularData.has_next;
+      mostPopular = mostPopularData.results;
+      mostPopularHasNext = mostPopularData.has_next;
       mostPopularPage = 1;
     } catch (err) {
       trending = [];
@@ -1115,7 +1243,6 @@
       popularHasNext = false;
       mostPopular = [];
       mostPopularHasNext = false;
-      showToast(err.message || "Couldn't load anime right now.");
     }
     renderTrending();
     renderTopAiring();
@@ -1136,6 +1263,14 @@
     }
   }
 
+  async function loadAd() {
+    try {
+      activeAd = await api("/api/ads/active");
+    } catch (err) {
+      activeAd = null;
+    }
+    renderAdSlot();
+  }
 
   async function preloadProfile() {
     try {
@@ -1145,10 +1280,10 @@
     }
   }
 
-  
-  
-  
-  
+  // ---------------------------------------------------------------------
+  // Deep links from the bot: ?anime=<id> opens that post directly,
+  // ?search=<text>&tab=library pre-fills the Search page with that title.
+  // ---------------------------------------------------------------------
   function applyDeepLink() {
     const params = new URLSearchParams(window.location.search);
     const animeId = params.get("anime");
@@ -1167,7 +1302,7 @@
 
   (async function init() {
     document.title = brandName;
-    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile()]);
+    await Promise.all([loadDiscover(), loadAvailable(), loadAd(), preloadProfile()]);
     applyDeepLink();
   })();
 })();
