@@ -1102,12 +1102,12 @@
         api("/api/catalog/popular"),
         api("/api/catalog/most-popular"),
       ]);
-      trending = trendingData.results;
-      popular = popularData.results;
-      popularHasNext = popularData.has_next;
+      trending = Array.isArray(trendingData.results) ? trendingData.results : [];
+      popular = Array.isArray(popularData.results) ? popularData.results : [];
+      popularHasNext = !!popularData.has_next;
       popularPage = 1;
-      mostPopular = mostPopularData.results;
-      mostPopularHasNext = mostPopularData.has_next;
+      mostPopular = Array.isArray(mostPopularData.results) ? mostPopularData.results : [];
+      mostPopularHasNext = !!mostPopularData.has_next;
       mostPopularPage = 1;
     } catch (err) {
       trending = [];
@@ -1115,6 +1115,7 @@
       popularHasNext = false;
       mostPopular = [];
       mostPopularHasNext = false;
+      showToast(err.message || "Couldn't load anime right now.");
     }
     renderTrending();
     renderTopAiring();
