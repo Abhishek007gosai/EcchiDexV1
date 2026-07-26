@@ -3,48 +3,12 @@ AniList adapter — public GraphQL API, no API key required.
 https://anilist.gitbook.io/anilist-apiv2-docs/
 """
 
-import logging
-import threading
 import time
-from collections import deque
 
 import requests
 
 from config import Config
 from plugins.base import AnimeSource
-
-logger = logging.getLogger(__name__)
-
-
-class _RateLimiter:
-    """Paces outgoing requests so we stay under AniList's own limit.
-
-    AniList's published limit fluctuates — 90 requests/minute normally,
-    but as low as 30/minute during one of its periodic "degraded"
-    states — and it's enforced per-source-IP, not per-request. A burst
-    (e.g. Home firing trending/popular/most-popular at once, or several
-    people opening the mini app together) can blow through that ceiling
-    in a couple of seconds even though the average rate is fine. This
-    just makes calls wait their turn instead of firing all at once and
-    bouncing off a 429.
-    """
-
-    def __init__(self, max_per_minute: int):
-        self._max_per_minute = max_per_minute
-        self._lock = threading.Lock()
-        self._timestamps: deque = deque()
-
-    def wait_for_slot(self):
-        while True:
-            with self._lock:
-                now = time.time()
-                while self._timestamps and now - self._timestamps[0] > 60:
-                    self._timestamps.popleft()
-                if len(self._timestamps) < self._max_per_minute:
-                    self._timestamps.append(now)
-                    return
-                sleep_for = 60 - (now - self._timestamps[0]) + 0.05
-            time.sleep(max(sleep_for, 0.05))
 
 SEARCH_QUERY = """
 query ($search: String, $page: Int) {
@@ -157,43 +121,28 @@ class AniListSource(AnimeSource):
 
     def __init__(self):
         self._cache: dict[str, tuple[float, dict]] = {}
-        self._limiter = _RateLimiter(Config.ANILIST_RATE_LIMIT_PER_MINUTE)
 
     def _post(self, query: str, variables: dict) -> dict:
-        # AniList's public API rate-limits aggressively, and more so
-        # during one of its "degraded" periods. When several requests
-        # land in the same burst (e.g. Home's trending/popular/most-
-        # popular calls firing together), a few commonly come back 429.
-        # Retry those with a short backoff instead of surfacing a
-        # failure for what's really just "try again in a moment".
+        # AniList's public API rate-limits aggressively. When several
+        # requests land in the same burst (e.g. fetching all genre
+        # thumbnails in parallel), a few commonly come back 429. Retry
+        # those with a short backoff instead of surfacing a failure for
+        # what's really just "try again in a moment".
         last_exc = None
-        for attempt in range(5):
-            self._limiter.wait_for_slot()
-            try:
-                resp = requests.post(
-                    Config.ANILIST_ENDPOINT,
-                    json={"query": query, "variables": variables},
-                    timeout=10,
-                )
-            except requests.RequestException as exc:
-                last_exc = exc
-                time.sleep(0.5 * (attempt + 1))
-                continue
+        for attempt in range(3):
+            resp = requests.post(
+                Config.ANILIST_ENDPOINT,
+                json={"query": query, "variables": variables},
+                timeout=10,
+            )
             if resp.status_code == 429:
                 last_exc = requests.HTTPError(f"429 rate limited (attempt {attempt + 1})", response=resp)
                 retry_after = resp.headers.get("Retry-After")
-                # AniList's own timeout for exceeding the limit can be up
-                # to 60s. Waiting that long inside a single request makes
-                # the app *feel* broken (a spinner or stuck button for a
-                # minute) even though it would eventually succeed. Cap the
-                # wait so we fail fast instead — the cache fallback below
-                # and the frontend's own retry cover the rest.
-                delay = min(float(retry_after), 5.0) if retry_after else 0.8 * (attempt + 1)
+                delay = float(retry_after) if retry_after else 0.6 * (attempt + 1)
                 time.sleep(delay)
                 continue
             resp.raise_for_status()
             return resp.json()["data"]
-        logger.warning("AniList request failed after retries: %s", last_exc)
         raise last_exc
 
     def search(self, query: str, page: int = 1) -> dict:
@@ -267,18 +216,7 @@ class AniListSource(AnimeSource):
         cached = self._cache.get(key)
         if cached and now - cached[0] < Config.CATALOG_CACHE_TTL:
             return cached[1]
-        try:
-            value = fetch()
-        except Exception:
-            # A live fetch failing (AniList rate-limited/degraded) is a
-            # bad reason to blank out a section that has stale-but-still-
-            # good data sitting right here. Serve that instead — it'll
-            # refresh itself next time a fetch succeeds. Only propagate
-            # the failure if we have nothing at all to fall back on.
-            if cached:
-                logger.warning("AniList refresh failed for %r, serving stale cache", key)
-                return cached[1]
-            raise
+        value = fetch()
         self._cache[key] = (now, value)
         return value
 
