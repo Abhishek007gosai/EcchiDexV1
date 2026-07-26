@@ -834,7 +834,7 @@
       } else {
         // Not in the local library yet (Discover/Genre post) — this creates
         // the library entry with the link already set, same result as
-        // Set Join Link in one step.
+        // /addpost + Set Join Link in one step.
         result = await api(`/api/anime/link-anilist/${linkTargetAnime.anilist_id}`, {
           method: "POST",
           body: JSON.stringify({ link: value }),
