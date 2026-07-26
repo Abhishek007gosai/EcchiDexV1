@@ -1166,7 +1166,7 @@
 
   (async function init() {
     document.title = brandName;
-    await Promise.all([loadDiscover(), loadAvailable(), loadAd(), preloadProfile()]);
+    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile()]);
     applyDeepLink();
   })();
 })();
