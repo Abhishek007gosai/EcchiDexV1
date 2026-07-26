@@ -13,21 +13,20 @@ bot runs in the same process via a Telegram webhook.
   title and a button that deep-links straight into the mini app at that
   exact post. If nothing matches, it offers to open the mini app's Search
   page, pre-searched.
-- **Mini app** — bottom nav is **Home / Search / Notifications / Profile**.
-  Home has an **All / Available** pill switch: All shows a Featured promo
-  carousel (from Anime News Network), Trending Now, a numbered Top Airing
-  list (with Load More), and a Genres row; Available is your posted
-  catalog, browsable A–Z, with the ad slot when one is running. Search is
-  a dedicated page with Popular Searches (tracked in MongoDB) and genre
-  tiles that browse AniList by genre.
+- **Mini app** — bottom nav is **Home / Search / Profile**.
+  Home has an **All / Available** pill switch: All shows Trending Now, a
+  horizontally-scrolling Top Airing row, and a Popular grid (with Load
+  more); Available is your posted catalog, browsable A–Z (plus a `#`
+  bucket for numeric-leading titles). Search is a dedicated page with
+  Popular Searches (tracked in MongoDB) and genre tiles that browse
+  AniList by genre.
 - **Voting** — any Trending/Top Airing/genre item that isn't posted yet
   shows a Vote button instead of Join. Every 20 votes, your log channel
   gets a "people are demanding this" notification. If an item's title
   matches an Available post that already has a join link, it shows Join
   instead of Vote automatically.
-- **Report** — Available posts only (not discovery items, ads, or
-  notifications). Preset reasons + optional 50-character note, sent to
-  your log channel.
+- **Report** — Available posts only (not discovery or genre items).
+  Preset reasons + optional 50-character note, sent to your log channel.
 - **Profile** — Telegram ID, registration status, role, access, verified
   via Telegram's WebApp `initData` signature.
 - **Admin ➕ link editor** — a ➕ button next to Join/Coming Soon (admin/owner
