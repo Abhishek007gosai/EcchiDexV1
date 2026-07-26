@@ -140,7 +140,22 @@ class AniListSource(AnimeSource):
                 time.sleep(delay)
                 continue
             resp.raise_for_status()
-            return resp.json()["data"]
+            payload = resp.json()
+            if payload.get("errors"):
+                messages = "; ".join(
+                    str(err.get("message", "AniList GraphQL error"))
+                    for err in payload["errors"]
+                )
+                raise requests.HTTPError(
+                    f"AniList GraphQL error: {messages}",
+                    response=resp,
+                )
+            if "data" not in payload:
+                raise requests.HTTPError(
+                    "AniList returned no data",
+                    response=resp,
+                )
+            return payload["data"]
         raise last_exc
 
     def search(self, query: str, page: int = 1) -> dict:
