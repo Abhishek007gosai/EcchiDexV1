@@ -23,10 +23,8 @@ anime_col = _db["anime"]
 users_col = _db["users"]
 reports_col = _db["reports"]
 votes_col = _db["votes"]
-ads_col = _db["ads"]
 searches_col = _db["searches"]
 recent_searches_col = _db["recent_searches"]
-notifications_col = _db["notifications"]
 counters_col = _db["counters"]
 
 
@@ -321,68 +319,6 @@ def get_vote_count(title: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Ads — a single active promotional post shown at the top of the Available
-# tab. Only one ad runs at a time; creating a new one replaces the old.
-# ---------------------------------------------------------------------------
-
-AD_DOC_ID = "current"
-
-
-def set_ad(image_url: str | None, caption: str, link: str | None, expires_at: float) -> None:
-    ads_col.replace_one(
-        {"_id": AD_DOC_ID},
-        {
-            "_id": AD_DOC_ID,
-            "image_url": image_url,
-            "caption": caption,
-            "link": link,
-            "created_at": time.time(),
-            "expires_at": expires_at,
-            "taps": 0,
-            "clicks": 0,
-        },
-        upsert=True,
-    )
-
-
-def get_active_ad() -> dict | None:
-    """Returns the live ad, or None if there isn't one / it just expired.
-    Expiry is checked lazily here (no background scheduler in this
-    process) — the first read after expires_at clears the stats from
-    Mongo automatically, per the "don't keep ad data around after it
-    ends" requirement."""
-    doc = ads_col.find_one({"_id": AD_DOC_ID})
-    if not doc:
-        return None
-    if time.time() >= doc["expires_at"]:
-        ads_col.delete_one({"_id": AD_DOC_ID})
-        return None
-    return doc
-
-
-def record_ad_tap():
-    ads_col.update_one({"_id": AD_DOC_ID}, {"$inc": {"taps": 1}})
-
-
-def record_ad_click():
-    ads_col.update_one({"_id": AD_DOC_ID}, {"$inc": {"clicks": 1}})
-
-
-def get_ad_stats() -> dict | None:
-    """Like get_active_ad, but also returns already-expired stats one last
-    time (without deleting) so /adstats can report a final tally right at
-    the moment it ends, before the next read clears it."""
-    doc = ads_col.find_one({"_id": AD_DOC_ID})
-    return doc
-
-
-def clear_ad() -> dict | None:
-    doc = ads_col.find_one({"_id": AD_DOC_ID})
-    ads_col.delete_one({"_id": AD_DOC_ID})
-    return doc
-
-
-# ---------------------------------------------------------------------------
 # Search tracking — powers the Search page's "Popular Searches" list.
 # ---------------------------------------------------------------------------
 
@@ -444,34 +380,4 @@ def get_recent_searches(user_id: int, limit: int = 10) -> list[dict]:
 
 def clear_recent_searches(user_id: int) -> None:
     recent_searches_col.delete_many({"user_id": user_id})
-
-
-# ---------------------------------------------------------------------------
-# Notifications — admin broadcasts pushed via /wbroadcast, shown in the
-# mini app's Notifications tab exactly as sent (thumbnail + caption + link).
-# ---------------------------------------------------------------------------
-
-def create_notification(image_url: str | None, caption: str, link: str | None, expires_at: float) -> int:
-    new_id = _next_id("notifications")
-    notifications_col.insert_one({
-        "_id": new_id,
-        "image_url": image_url,
-        "caption": caption,
-        "link": link,
-        "created_at": time.time(),
-        "expires_at": expires_at,
-    })
-    return new_id
-
-
-def list_notifications(limit: int = 30) -> list[dict]:
-    now = time.time()
-    notifications_col.delete_many({"expires_at": {"$lte": now}})
-    docs = notifications_col.find({"expires_at": {"$gt": now}}).sort("created_at", -1).limit(limit)
-    out = []
-    for d in docs:
-        item = dict(d)
-        item["id"] = item.pop("_id")
-        out.append(item)
-    return out
 
