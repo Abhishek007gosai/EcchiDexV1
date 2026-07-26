@@ -104,7 +104,6 @@
   const searchResults = el("search-results");
   const searchResultsGroups = el("search-results-groups");
   const searchResultsEmpty = el("search-results-empty");
-  const searchResultsLoading = el("search-results-loading");
   const searchLanding = el("search-landing");
   const popularSearchList = el("popular-search-list");
   const popularSearchRefresh = el("popular-search-refresh");
@@ -129,7 +128,6 @@
   const letterBar = el("letter-bar");
   const availableGroups = el("available-groups");
   const availableEmpty = el("available-empty");
-  const adSlot = el("ad-slot");
 
   const navBtns = document.querySelectorAll(".nav-btn");
 
@@ -175,7 +173,6 @@
   let mostPopularHasNext = false;
   let mostPopularLoading = false;
   let available = [];
-  let activeAd = null;
   let activeLetter = null;
   let libraryQuery = "";
   let profile = null;
@@ -395,9 +392,9 @@
 
   function renderPopularGrid() {
     popularGridList.innerHTML = "";
-    const byTitle = availableByTitle();
+    const availIndex = buildAvailableIndex();
     mostPopular.forEach((item) => {
-      const matched = byTitle.get(item.title.toLowerCase());
+      const matched = availIndex.match(item);
       item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
       popularGridList.appendChild(popularGridCard(item, () => openDiscoverDetail(item)));
     });
@@ -500,54 +497,10 @@
   }
 
   // ---------------------------------------------------------------------
-  // Ad slot (Available/library tab only)
-  // ---------------------------------------------------------------------
-  function renderAdSlot() {
-    adSlot.innerHTML = "";
-    if (!activeAd) {
-      adSlot.classList.add("hidden");
-      return;
-    }
-    adSlot.classList.remove("hidden");
-
-    const card = document.createElement("div");
-    card.className = "ad-card";
-    thumbImg(card, activeAd.image_url, "Ad");
-
-    const badge = document.createElement("span");
-    badge.className = "ad-badge";
-    badge.textContent = "AD";
-    card.appendChild(badge);
-
-    const wrap = document.createElement("div");
-    wrap.className = "ad-caption-wrap";
-    const summary = document.createElement("p");
-    summary.className = "ad-caption-summary";
-    summary.textContent = activeAd.caption;
-    wrap.appendChild(summary);
-    card.appendChild(wrap);
-
-    card.addEventListener("click", openAdDetail);
-    adSlot.appendChild(card);
-  }
-
-  function openAdDetail() {
-    if (!activeAd) return;
-    api("/api/ads/tap", { method: "POST" }).catch(() => {});
-    openDetailSheet({
-      title: "Sponsored",
-      description: activeAd.caption,
-      genres: [],
-      poster_url: activeAd.image_url,
-      link: activeAd.link,
-    }, "ad");
-  }
-
-  // ---------------------------------------------------------------------
   // Detail sheet (compact centered modal)
   // ---------------------------------------------------------------------
   let currentDetail = null;
-  let currentContext = null; // "available" | "discover" | "ad" | "genre"
+  let currentContext = null; // "available" | "discover" | "genre"
   let descriptionExpanded = false;
 
   function openDetailSheet(anime, context) {
@@ -665,21 +618,6 @@
     detailActionArea.innerHTML = "";
     reportOpenBtn.classList.toggle("hidden", !["available", "discover", "genre"].includes(context));
 
-    if (context === "ad" || context === "notification") {
-      if (anime.link) {
-        const clickBtn = document.createElement("button");
-        clickBtn.className = "btn btn-primary";
-        clickBtn.textContent = context === "ad" ? "Click Here" : "Open Link";
-        clickBtn.addEventListener("click", () => {
-          if (context === "ad") api("/api/ads/click", { method: "POST" }).catch(() => {});
-          if (tg && tg.openLink) tg.openLink(anime.link);
-          else window.open(anime.link, "_blank");
-        });
-        detailActionArea.appendChild(clickBtn);
-      }
-      return;
-    }
-
     if (context === "discover" || context === "genre") {
       const row = document.createElement("div");
       row.className = "action-row";
@@ -776,8 +714,8 @@
   }
 
   async function openGenreItemDetail(item) {
-    const byTitle = availableByTitle();
-    const matched = byTitle.get(item.title.toLowerCase());
+    const availIndex = buildAvailableIndex();
+    const matched = availIndex.match(item);
     item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
     openDetailSheet({ ...item, description: "Loading synopsis...", genres: [] }, "genre");
     try {
@@ -1077,9 +1015,8 @@
     searchResults.classList.remove("hidden");
     searchResultsGroups.innerHTML = "";
     searchResultsEmpty.classList.add("hidden");
-    searchResultsLoading.classList.remove("hidden");
 
-    const byTitle = availableByTitle();
+    const availIndex = buildAvailableIndex();
     const localMatches = available.filter((a) => a.title.toLowerCase().includes(query.toLowerCase()));
     localMatches.forEach((item) => {
       searchResultsGroups.appendChild(searchResultRow(item, () => {
@@ -1097,7 +1034,7 @@
       const localTitles = new Set(localMatches.map((a) => a.title.toLowerCase()));
       data.results.forEach((item) => {
         if (localTitles.has(item.title.toLowerCase())) return; // already shown above
-        const matched = byTitle.get(item.title.toLowerCase());
+        const matched = availIndex.match(item);
         item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
         searchResultsGroups.appendChild(searchResultRow(item, () => {
           trackConfirmedSearch(item.title);
@@ -1108,7 +1045,6 @@
     } catch (err) {
       searchResultsEmpty.classList.toggle("hidden", searchResultsGroups.children.length !== 0);
     }
-    if (myToken === searchToken) searchResultsLoading.classList.add("hidden");
     searchLoading = false;
   }
 
@@ -1121,9 +1057,9 @@
       if (myToken !== searchToken) return;
       searchPage += 1;
       searchHasNext = data.has_next;
-      const byTitle = availableByTitle();
+      const availIndex = buildAvailableIndex();
       data.results.forEach((item) => {
-        const matched = byTitle.get(item.title.toLowerCase());
+        const matched = availIndex.match(item);
         item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
         searchResultsGroups.appendChild(searchResultRow(item, () => openDiscoverDetail(item)));
       });
@@ -1225,66 +1161,30 @@
   // ---------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------
-  async function loadDiscover(isRetry = false) {
-    // allSettled (not all): each section fetches independently, so if
-    // e.g. AniList rate-limits one call, the other two still render
-    // instead of the whole Home tab going blank.
-    const [trendingResult, popularResult, mostPopularResult] = await Promise.allSettled([
-      api("/api/catalog/trending"),
-      api("/api/catalog/popular"),
-      api("/api/catalog/most-popular"),
-    ]);
-
-    let anyFailed = false;
-
-    // The backend swallows AniList errors and still replies 200 with an
-    // empty list, so a rejected promise isn't the only failure signal —
-    // an empty result set here means the same thing in practice, since
-    // there's essentially always some trending/airing anime to show.
-    if (trendingResult.status === "fulfilled") {
-      trending = trendingResult.value.results;
-      if (trending.length === 0) anyFailed = true;
-    } else {
-      anyFailed = true;
-      trending = [];
-    }
-
-    if (popularResult.status === "fulfilled") {
-      popular = popularResult.value.results;
-      popularHasNext = popularResult.value.has_next;
+  async function loadDiscover() {
+    try {
+      const [trendingData, popularData, mostPopularData] = await Promise.all([
+        api("/api/catalog/trending"),
+        api("/api/catalog/popular"),
+        api("/api/catalog/most-popular"),
+      ]);
+      trending = trendingData.results;
+      popular = popularData.results;
+      popularHasNext = popularData.has_next;
       popularPage = 1;
-      if (popular.length === 0) anyFailed = true;
-    } else {
-      anyFailed = true;
+      mostPopular = mostPopularData.results;
+      mostPopularHasNext = mostPopularData.has_next;
+      mostPopularPage = 1;
+    } catch (err) {
+      trending = [];
       popular = [];
       popularHasNext = false;
-    }
-
-    if (mostPopularResult.status === "fulfilled") {
-      mostPopular = mostPopularResult.value.results;
-      mostPopularHasNext = mostPopularResult.value.has_next;
-      mostPopularPage = 1;
-      if (mostPopular.length === 0) anyFailed = true;
-    } else {
-      anyFailed = true;
       mostPopular = [];
       mostPopularHasNext = false;
     }
-
     renderTrending();
     renderTopAiring();
     renderPopularGrid();
-
-    // Most failures here are AniList momentarily rate-limiting us, which
-    // clears up within a few seconds — so try again once on our own
-    // before bothering the user about it.
-    if (anyFailed) {
-      if (!isRetry) {
-        setTimeout(() => loadDiscover(true), 4000);
-      } else {
-        showToast("Some anime couldn't load right now — check back in a bit.");
-      }
-    }
   }
 
   async function loadAvailable() {
@@ -1299,15 +1199,6 @@
       renderTopAiring();
       renderPopularGrid();
     }
-  }
-
-  async function loadAd() {
-    try {
-      activeAd = await api("/api/ads/active");
-    } catch (err) {
-      activeAd = null;
-    }
-    renderAdSlot();
   }
 
   async function preloadProfile() {
@@ -1340,7 +1231,7 @@
 
   (async function init() {
     document.title = brandName;
-    await Promise.all([loadDiscover(), loadAvailable(), loadAd(), preloadProfile()]);
+    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile()]);
     applyDeepLink();
   })();
 })();
