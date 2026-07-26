@@ -39,15 +39,17 @@ bot runs in the same process via a Telegram webhook.
   commands have been removed in favor of doing everything from the mini
   app.
 - **Franchise-wide auto-linking** — setting a join link on any title
-  applies the same link to every other already-posted season, OVA,
-  movie, or spin-off in that franchise, found by walking the full AniList
-  relation graph across posted entries (not just direct prequel/sequel —
-  a distant season several hops away still picks it up as long as
-  something bridging them is posted). Posting a new season later
-  auto-inherits the link the same way. Clearing a link removes it (and
-  the post itself, along with the rest of that now-unlinked family) from
-  MongoDB entirely, rather than leaving an unjoinable entry behind — a
-  post only stays saved while it has a working link.
+  automatically finds and links every other season, OVA, movie, spin-off,
+  or alternate cut in that franchise — including ones that aren't posted
+  yet. It walks the full AniList relation graph live: anything already
+  posted just gets updated, and anything not posted yet is fetched from
+  AniList and created on the spot with the same link, then its own
+  relations are walked too — so linking Season 1 alone is enough to pull
+  in and link Season 2–N, OVAs, and movies even if none of them were ever
+  posted before. Clearing a link removes it (and the post itself, along
+  with the rest of that now-unlinked family) from MongoDB entirely,
+  rather than leaving an unjoinable entry behind — a post only stays
+  saved while it has a working link.
 - Post details open as a small, fixed-size centered card — not a
   full-screen page — with the action buttons always in the same spot
   regardless of title/genre/description length.

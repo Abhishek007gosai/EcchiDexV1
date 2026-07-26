@@ -530,6 +530,56 @@ def api_profile():
     return jsonify(profile)
 
 
+def propagate_link_full_franchise(anime_id: int, link: str) -> int:
+    """Like db.propagate_join_link, but not limited to titles that are
+    already posted. db.propagate_join_link can only *update* MongoDB docs
+    that already exist — and since an unlinked title is never saved (see
+    upsert_anime/delete_anime_family in database.py), the very first time
+    you link Season 1, none of Season 2/3/4/OVAs/movies exist in MongoDB
+    yet, so there'd be nothing for it to actually reach. This instead
+    walks the full AniList relation graph live: for each related title
+    that isn't posted yet, it fetches that title's own details from
+    AniList and creates+links it on the spot, then continues the walk
+    using *that* title's relations too — so linking any one entry point
+    pulls in and links the whole franchise (seasons, OVAs, movies,
+    spin-offs, alternates), not just whatever happened to be posted
+    already. Returns how many *other* titles ended up linked."""
+    doc = db.get_anime(anime_id)
+    if not doc:
+        return 0
+    source = doc["source"]
+    src = SOURCES[source]
+
+    seen = {str(doc["source_id"])}
+    frontier = [str(x) for x in (doc.get("related_ids") or [])]
+    updated = 0
+    MAX_FETCHES = 40  # safety cap so one link-set can't spiral into dozens of AniList calls
+
+    while frontier and updated < MAX_FETCHES:
+        sid = frontier.pop()
+        if sid in seen:
+            continue
+        seen.add(sid)
+
+        existing = db.find_by_source_id(source, sid)
+        if existing:
+            db.update_link(existing["id"], link)
+            updated += 1
+            frontier.extend(str(x) for x in (existing.get("related_ids") or []))
+            continue
+
+        try:
+            details = src.get_details(sid)
+        except requests.RequestException:
+            continue  # skip this branch, but keep walking the rest of the graph
+        new_id = db.upsert_anime(details)
+        db.update_link(new_id, link)
+        updated += 1
+        frontier.extend(str(x) for x in (details.get("related_ids") or []))
+
+    return updated
+
+
 @app.patch("/api/anime/<int:anime_id>/link")
 def api_edit_link(anime_id):
     user = current_user()
@@ -545,7 +595,7 @@ def api_edit_link(anime_id):
         return jsonify(error=str(e)), 400
     if link:
         db.update_link(anime_id, link)
-        propagated = db.propagate_join_link(anime_id, link)
+        propagated = propagate_link_full_franchise(anime_id, link)
         return jsonify(status="updated", link=link, propagated=propagated)
     # No link = not a real post anymore — delete it (and the rest of its
     # franchise, which just lost the link via propagation) from MongoDB
@@ -577,7 +627,7 @@ def api_set_link_from_anilist(anilist_id):
         return jsonify(error="Couldn't fetch details from AniList right now."), 502
     anime_id = db.upsert_anime(details, added_by=user["id"])
     db.update_link(anime_id, link)
-    propagated = db.propagate_join_link(anime_id, link)
+    propagated = propagate_link_full_franchise(anime_id, link)
     return jsonify(status="updated", anime=db.get_anime(anime_id), propagated=propagated)
 
 
