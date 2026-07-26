@@ -155,18 +155,9 @@ def get_anime(anime_id: int) -> dict | None:
 
 
 def list_available() -> list[dict]:
-    """Return only local anime that have a Join Link.
-
-    The All view uses the complete local/discovery catalog, while Available
-    is the subset that is actually joinable. Any anime added to the local
-    library is therefore still part of All, and becomes Available as soon
-    as a Join Link is set.
-    """
-    docs = (
-        anime_col.find({"join_link": {"$nin": [None, ""]}})
-        .collation({"locale": "en", "strength": 2})
-        .sort("title", ASCENDING)
-    )
+    """Every post in the local library — a post appears here as soon as
+    /addpost creates it, whether or not a join link has been set yet."""
+    docs = anime_col.find().collation({"locale": "en", "strength": 2}).sort("title", ASCENDING)
     return [_to_anime(d) for d in docs]
 
 
@@ -213,24 +204,22 @@ def propagate_join_link(anime_id: int, link: str) -> int:
 # ---------------------------------------------------------------------------
 
 def get_or_create_user(telegram_id: int, username: str | None, first_name: str | None,
-                        is_admin: bool, last_name: str | None = None, photo_url: str | None = None) -> dict:
+                        is_admin: bool) -> dict:
     role = "admin" if is_admin else "member"
     existing = users_col.find_one({"_id": telegram_id})
 
     if existing:
         users_col.update_one(
             {"_id": telegram_id},
-            {"$set": {"username": username, "first_name": first_name, "last_name": last_name,
-                      "photo_url": photo_url, "role": role}},
+            {"$set": {"username": username, "first_name": first_name, "role": role}},
         )
-        existing.update(username=username, first_name=first_name, last_name=last_name, photo_url=photo_url, role=role)
+        existing.update(username=username, first_name=first_name, role=role)
         existing["telegram_id"] = existing.pop("_id")
         return existing
 
     now = time.time()
     doc = {
         "_id": telegram_id, "username": username, "first_name": first_name,
-        "last_name": last_name, "photo_url": photo_url,
         "role": role, "access": "active", "registered_at": now,
     }
     users_col.insert_one(dict(doc))
