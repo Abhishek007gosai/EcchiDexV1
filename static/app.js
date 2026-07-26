@@ -104,6 +104,7 @@
   const searchResults = el("search-results");
   const searchResultsGroups = el("search-results-groups");
   const searchResultsEmpty = el("search-results-empty");
+  const searchResultsLoading = el("search-results-loading");
   const searchLanding = el("search-landing");
   const popularSearchList = el("popular-search-list");
   const popularSearchRefresh = el("popular-search-refresh");
@@ -1076,6 +1077,7 @@
     searchResults.classList.remove("hidden");
     searchResultsGroups.innerHTML = "";
     searchResultsEmpty.classList.add("hidden");
+    searchResultsLoading.classList.remove("hidden");
 
     const byTitle = availableByTitle();
     const localMatches = available.filter((a) => a.title.toLowerCase().includes(query.toLowerCase()));
@@ -1106,6 +1108,7 @@
     } catch (err) {
       searchResultsEmpty.classList.toggle("hidden", searchResultsGroups.children.length !== 0);
     }
+    if (myToken === searchToken) searchResultsLoading.classList.add("hidden");
     searchLoading = false;
   }
 
@@ -1222,30 +1225,66 @@
   // ---------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------
-  async function loadDiscover() {
-    try {
-      const [trendingData, popularData, mostPopularData] = await Promise.all([
-        api("/api/catalog/trending"),
-        api("/api/catalog/popular"),
-        api("/api/catalog/most-popular"),
-      ]);
-      trending = trendingData.results;
-      popular = popularData.results;
-      popularHasNext = popularData.has_next;
-      popularPage = 1;
-      mostPopular = mostPopularData.results;
-      mostPopularHasNext = mostPopularData.has_next;
-      mostPopularPage = 1;
-    } catch (err) {
+  async function loadDiscover(isRetry = false) {
+    // allSettled (not all): each section fetches independently, so if
+    // e.g. AniList rate-limits one call, the other two still render
+    // instead of the whole Home tab going blank.
+    const [trendingResult, popularResult, mostPopularResult] = await Promise.allSettled([
+      api("/api/catalog/trending"),
+      api("/api/catalog/popular"),
+      api("/api/catalog/most-popular"),
+    ]);
+
+    let anyFailed = false;
+
+    // The backend swallows AniList errors and still replies 200 with an
+    // empty list, so a rejected promise isn't the only failure signal —
+    // an empty result set here means the same thing in practice, since
+    // there's essentially always some trending/airing anime to show.
+    if (trendingResult.status === "fulfilled") {
+      trending = trendingResult.value.results;
+      if (trending.length === 0) anyFailed = true;
+    } else {
+      anyFailed = true;
       trending = [];
+    }
+
+    if (popularResult.status === "fulfilled") {
+      popular = popularResult.value.results;
+      popularHasNext = popularResult.value.has_next;
+      popularPage = 1;
+      if (popular.length === 0) anyFailed = true;
+    } else {
+      anyFailed = true;
       popular = [];
       popularHasNext = false;
+    }
+
+    if (mostPopularResult.status === "fulfilled") {
+      mostPopular = mostPopularResult.value.results;
+      mostPopularHasNext = mostPopularResult.value.has_next;
+      mostPopularPage = 1;
+      if (mostPopular.length === 0) anyFailed = true;
+    } else {
+      anyFailed = true;
       mostPopular = [];
       mostPopularHasNext = false;
     }
+
     renderTrending();
     renderTopAiring();
     renderPopularGrid();
+
+    // Most failures here are AniList momentarily rate-limiting us, which
+    // clears up within a few seconds — so try again once on our own
+    // before bothering the user about it.
+    if (anyFailed) {
+      if (!isRetry) {
+        setTimeout(() => loadDiscover(true), 4000);
+      } else {
+        showToast("Some anime couldn't load right now — check back in a bit.");
+      }
+    }
   }
 
   async function loadAvailable() {
