@@ -586,41 +586,20 @@ async def handle_pick(q, update, sid, idx):
         await q.edit_message_text("Couldn't fetch full details for that title. Try again.")
         return
 
+    anime_id = db.upsert_anime(details, added_by=update.effective_user.id)
     SESSIONS.pop(sid, None)
-    admin_id = update.effective_user.id
 
-    # Nothing is written to MongoDB yet at this point — a title is only
-    # saved once it actually has a join link, so an abandoned /addpost
-    # never leaves an unlinked, unjoinable entry sitting in the catalog
-    # (and never shows under Available, which only lists linked titles).
-    related_ids = [str(x) for x in details.get("related_ids", [])]
-    inherited_link = db.find_inherited_link(details["source"], related_ids)
-
-    if inherited_link:
-        anime_id = db.upsert_anime(details, added_by=admin_id)
-        db.update_link(anime_id, inherited_link)
-        propagated = db.propagate_join_link(anime_id, inherited_link)
-        text = (
-            f"\u2705 Post created: {details['title']}\n\n"
-            f"Inherited the join link already set for a related title.\n"
-            f"It's live under Available on {Config.BRAND_NAME} now."
-        )
-        if propagated:
-            text += f"\nAlso applied to {propagated} related title(s)."
-        await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[_preview_button(anime_id)]]))
-        return
-
-    PENDING_LINK[admin_id] = {
-        "details": details, "title": details["title"], "created": time.time(), "mode": "auto",
-    }
     await q.edit_message_text(
-        f"Fetched: {details['title']}\n\n"
-        f"It won't be saved or show under Available until a join link is set for it."
+        f"\u2705 Post created: {details['title']}\n\n"
+        f"It's live under Available on {Config.BRAND_NAME} now.",
+        reply_markup=InlineKeyboardMarkup([[_webapp_button()]]),
     )
+    PENDING_LINK[update.effective_user.id] = {
+        "anime_id": anime_id, "title": details["title"], "created": time.time(), "mode": "auto",
+    }
     await q.message.reply_text(
-        f"\U0001f4ce Now send a join link for {details['title']} as your next "
-        f"message (a Telegram @username, a t.me/ link, an invite link, or a channel ID) "
-        f"to finish adding the post."
+        f"\U0001f4ce Now set a join link for {details['title']} — just send it as your next "
+        f"message (a Telegram @username, a t.me/ link, an invite link, or a channel ID)."
     )
 
 
@@ -654,27 +633,14 @@ async def handle_editdone(q, sid):
         await q.answer("Session expired — run /editpost again.", show_alert=True)
         return
     SESSIONS.pop(sid, None)
-    link = session["link"]
-    if link:
-        db.update_link(session["anime_id"], link)
-        propagated = db.propagate_join_link(session["anime_id"], link)
-        await q.answer("Saved")
-        keyboard = InlineKeyboardMarkup([[_preview_button(session["anime_id"])]])
-        text = f"\u2705 Join link updated for {session['title']}."
-        if propagated:
-            text += f"\nAlso applied to {propagated} related title(s)."
-        await q.edit_message_text(text, reply_markup=keyboard)
-    else:
-        # No link = not a real post anymore — delete it (and the rest of
-        # its franchise, which just lost the link too via propagation)
-        # from MongoDB entirely, rather than leaving an unlinked,
-        # unjoinable entry behind.
-        propagated = db.delete_anime_family(session["anime_id"])
-        await q.answer("Removed")
-        text = f"\U0001f5d1 {session['title']} had no join link, so it was removed."
-        if propagated:
-            text += f"\nAlso removed {propagated} related title(s)."
-        await q.edit_message_text(text)
+    db.update_link(session["anime_id"], session["link"])
+    propagated = db.propagate_join_link(session["anime_id"], session["link"])
+    await q.answer("Saved")
+    keyboard = InlineKeyboardMarkup([[_preview_button(session["anime_id"])]])
+    text = f"\u2705 Join link updated for {session['title']}."
+    if propagated:
+        text += f"\nAlso applied to {propagated} related title(s)."
+    await q.edit_message_text(text, reply_markup=keyboard)
 
 
 async def handle_adsave(q, sid):
@@ -747,24 +713,11 @@ async def handle_pending_link_text(update: Update, pending: dict):
     admin_id = update.effective_user.id
 
     if pending["mode"] == "auto":
-        if not link:
-            # This is a brand-new post that was never saved to MongoDB in
-            # the first place (see handle_pick) — with no link there's
-            # nothing worth keeping, so just drop the pending state.
-            PENDING_LINK.pop(admin_id, None)
-            await update.message.reply_text(
-                f"Cancelled — {pending['title']} wasn't saved since no join link was set."
-            )
-            return
-        anime_id = db.upsert_anime(pending["details"], added_by=admin_id)
-        db.update_link(anime_id, link)
-        propagated = db.propagate_join_link(anime_id, link)
+        db.update_link(pending["anime_id"], link)
+        propagated = db.propagate_join_link(pending["anime_id"], link)
         PENDING_LINK.pop(admin_id, None)
-        keyboard = InlineKeyboardMarkup([[_preview_button(anime_id)]])
-        text = (
-            f"\u2705 Post created: {pending['title']}\n\n"
-            f"It's live under Available on {Config.BRAND_NAME} now."
-        )
+        keyboard = InlineKeyboardMarkup([[_preview_button(pending["anime_id"])]])
+        text = f"\u2705 Join link saved for {pending['title']}."
         if propagated:
             text += f"\nAlso applied to {propagated} related title(s)."
         await update.message.reply_text(text, reply_markup=keyboard)
@@ -777,15 +730,10 @@ async def handle_pending_link_text(update: Update, pending: dict):
         InlineKeyboardButton("\u2705 Done", callback_data=f"editdone:{sid}"),
         InlineKeyboardButton("\u274c Cancel", callback_data=f"cancel:{sid}"),
     ]])
-    if link:
-        prompt = f"Set join link for *{pending['title']}* to:\n{link}\n\nSave this?"
-    else:
-        prompt = (
-            f"Remove the join link for *{pending['title']}*?\n\n"
-            f"With no link, this post \u2014 and any related title that only had this same "
-            f"link \u2014 will be *deleted*, not just hidden from Available."
-        )
-    await update.message.reply_text(prompt, reply_markup=keyboard, parse_mode="Markdown")
+    await update.message.reply_text(
+        f"Set join link for *{pending['title']}* to:\n{link}\n\nSave this?",
+        reply_markup=keyboard, parse_mode="Markdown",
+    )
 
 
 async def handle_ad_session_text(update: Update, session: dict):
@@ -1119,14 +1067,7 @@ def api_notifications():
 
 @app.get("/api/catalog/available")
 def api_available():
-    # A title is only ever saved without being deleted again while it has
-    # a join link (see upsert_anime/delete_anime_family in database.py),
-    # so in practice db.list_available() is already links-only. This
-    # filter is a defensive safety net for that invariant — e.g. any
-    # pre-existing data from before this behavior — so the public
-    # Available tab never shows an unjoinable title even if one somehow
-    # exists without a link.
-    return jsonify([a for a in db.list_available() if a.get("available")])
+    return jsonify(db.list_available())
 
 
 @app.get("/api/anime/<int:anime_id>")
@@ -1192,6 +1133,8 @@ def api_profile():
         telegram_id=user["id"],
         username=user.get("username"),
         first_name=user.get("first_name"),
+        last_name=user.get("last_name"),
+        photo_url=user.get("photo_url"),
         is_admin=is_admin(user),
     )
     return jsonify(profile)
@@ -1210,15 +1153,9 @@ def api_edit_link(anime_id):
         link = normalize_join_link(raw_link)
     except ValueError as e:
         return jsonify(error=str(e)), 400
-    if link:
-        db.update_link(anime_id, link)
-        propagated = db.propagate_join_link(anime_id, link)
-        return jsonify(status="updated", link=link, propagated=propagated)
-    # No link = not a real post anymore — delete it (and the rest of its
-    # franchise, which just lost the link via propagation) from MongoDB
-    # entirely, rather than leaving an unlinked, unjoinable entry behind.
-    propagated = db.delete_anime_family(anime_id)
-    return jsonify(status="deleted", link="", propagated=propagated)
+    db.update_link(anime_id, link)
+    propagated = db.propagate_join_link(anime_id, link) if link else 0
+    return jsonify(status="updated", link=link, propagated=propagated)
 
 
 @app.post("/api/anime/link-anilist/<int:anilist_id>")
@@ -1244,7 +1181,7 @@ def api_set_link_from_anilist(anilist_id):
         return jsonify(error="Couldn't fetch details from AniList right now."), 502
     anime_id = db.upsert_anime(details, added_by=user["id"])
     db.update_link(anime_id, link)
-    propagated = db.propagate_join_link(anime_id, link)
+    propagated = db.propagate_join_link(anime_id, link) if link else 0
     return jsonify(status="updated", anime=db.get_anime(anime_id), propagated=propagated)
 
 
