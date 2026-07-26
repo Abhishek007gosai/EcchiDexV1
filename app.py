@@ -10,7 +10,7 @@ pushes updates straight to /webhook/<secret>, which is what the platforms
 expect.
 
 Important deployment note: this process keeps in-memory bot state
-(SESSIONS for multi-step flows, PENDING_LINK, AD_SESSIONS) and a single
+(SESSIONS for multi-step flows and PENDING_LINK) and a single
 asyncio event loop. Run it with a single worker (see Dockerfile /
 render.yaml) — multiple worker processes would each have their own copy
 of this state and event loop, breaking every multi-step flow.
@@ -38,15 +38,22 @@ from telegram.ext import (
     MessageHandler, filters,
 )
 
+# ---------------------------------------------------------------------------
+# Flask app
+# ---------------------------------------------------------------------------
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = Config.SECRET_KEY
-
-
+# 1 hour static cache — trims repeat-visit load time on Render/Koyeb without
+# risking a stale asset for too long after a redeploy.
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600
 
 db.init_db()
 
+# ---------------------------------------------------------------------------
+# Telegram bot (python-telegram-bot v20+, async) glued into sync Flask via a
+# single long-lived event loop.
+# ---------------------------------------------------------------------------
 
 bot_app: Application | None = None
 _loop = asyncio.new_event_loop()
@@ -56,10 +63,15 @@ def run_async(coro):
     return _loop.run_until_complete(coro)
 
 
+# In-memory session store for short multi-step conversations.
 SESSIONS: dict[str, dict] = {}
-SESSION_TTL = 15 * 60  
+SESSION_TTL = 15 * 60  # 15 minutes
 
+# Per-admin pending join-link state for the mini-app editor.
+PENDING_LINK: dict[int, dict] = {}
+PENDING_LINK_TTL = 15 * 60
 
+# Fixed genre set shown on the Search page's genre tiles.
 GENRES = ["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Romance", "Sci-Fi", "Horror"]
 
 
@@ -82,8 +94,8 @@ def _webapp_button(label: str = None) -> InlineKeyboardButton:
     label = label or f"\U0001f4d6 Open {Config.BRAND_NAME}"
     if Config.WEBAPP_URL.startswith("https://"):
         return InlineKeyboardButton(label, web_app=WebAppInfo(url=Config.WEBAPP_URL))
-    
-    
+    # Telegram requires an https URL for web_app buttons — fall back to a
+    # plain link so the bot still works before you have a deployed URL.
     return InlineKeyboardButton(label, url=Config.WEBAPP_URL or "https://telegram.org")
 
 
@@ -112,6 +124,8 @@ def _search_in_app_button(text: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(label, url=Config.WEBAPP_URL or "https://telegram.org")
 
 
+# --- Commands -------------------------------------------------------------
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start no longer shows the welcome card — it just exists so joining
     the bot doesn't feel broken. Use /anidex for the actual start menu."""
@@ -121,21 +135,284 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_anidex(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     try:
-        text = Config.START_MSG.format(
-            first_name=user.first_name or "there",
-            brand_name=Config.BRAND_NAME,
-        )
+        text = Config.START_MSG.format(first_name=user.first_name, brand_name=Config.BRAND_NAME)
     except (KeyError, IndexError, ValueError):
         text = Config.START_MSG
+    keyboard = InlineKeyboardMarkup([[_webapp_button()]])
+    if Config.BANNER_IMAGE_URL:
+        await update.message.reply_photo(Config.BANNER_IMAGE_URL, caption=text,
+                                          reply_markup=keyboard, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
 
-    keyboard = None
-    if Config.WEBAPP_URL:
-        keyboard = InlineKeyboardMarkup([[
-            _open_app_button(f"\U0001f4fa Open {Config.BRAND_NAME}")
-        ]])
 
-    await update.message.reply_text(text, reply_markup=keyboard)
 
+
+
+
+
+
+
+
+
+async def handle_page(q, sid, page):
+    session = SESSIONS.get(sid)
+    if not session:
+        await q.answer("Session expired — please try again.", show_alert=True)
+        return
+    await q.answer()
+    src = SOURCES[session["source"]]
+    data = await asyncio.to_thread(src.search, session["query"], page)
+    session.update(page=page, results=data["results"], has_next=data["has_next"])
+    await render_results(q, sid)
+
+
+def _results_text(session):
+    return "Search Results (ANILIST)\nSelect the correct title from the list below:"
+
+
+def _results_keyboard(sid, session):
+    rows = [
+        [InlineKeyboardButton(
+            f"{r['title']}" + (f" ({r['year']})" if r.get("year") else ""),
+            callback_data=f"pick:{sid}:{i}",
+        )]
+        for i, r in enumerate(session["results"])
+    ]
+    nav = []
+    if session["page"] > 1:
+        nav.append(InlineKeyboardButton("\u2b05 Prev", callback_data=f"page:{sid}:{session['page'] - 1}"))
+    nav.append(InlineKeyboardButton(str(session["page"]), callback_data="noop"))
+    if session.get("has_next"):
+        nav.append(InlineKeyboardButton("Next \u27a1", callback_data=f"page:{sid}:{session['page'] + 1}"))
+    rows.append(nav)
+    rows.append([InlineKeyboardButton("Cancel", callback_data=f"cancel:{sid}")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_results(message, sid):
+    session = SESSIONS[sid]
+    await message.reply_text(_results_text(session), reply_markup=_results_keyboard(sid, session))
+
+
+async def render_results(q, sid):
+    session = SESSIONS[sid]
+    if not session["results"]:
+        await q.edit_message_text(f"No results found on AniList for '{session['query']}'.")
+        SESSIONS.pop(sid, None)
+        return
+    await q.edit_message_text(_results_text(session), reply_markup=_results_keyboard(sid, session))
+
+
+async def handle_pick(q, update, sid, idx):
+    session = SESSIONS.get(sid)
+    if not session:
+        await q.answer("Session expired — please try again.", show_alert=True)
+        return
+    await q.answer("Fetching details...")
+    r = session["results"][idx]
+    src = SOURCES[session["source"]]
+    try:
+        details = await asyncio.to_thread(src.get_details, r["source_id"])
+    except Exception:
+        await q.edit_message_text("Couldn't fetch full details for that title. Try again.")
+        return
+
+    SESSIONS.pop(sid, None)
+    admin_id = update.effective_user.id
+
+    # Nothing is written to MongoDB yet at this point — a title is only
+    # saved once it actually has a join link, so an abandoned add flow
+    # never leaves an unlinked, unjoinable entry sitting in the catalog
+    # (and never shows under Available, which only lists linked titles).
+    related_ids = [str(x) for x in details.get("related_ids", [])]
+    inherited_link = db.find_inherited_link(details["source"], related_ids)
+
+    if inherited_link:
+        anime_id = db.upsert_anime(details, added_by=admin_id)
+        db.update_link(anime_id, inherited_link)
+        propagated = db.propagate_join_link(anime_id, inherited_link)
+        text = (
+            f"\u2705 Post created: {details['title']}\n\n"
+            f"Inherited the join link already set for a related title.\n"
+            f"It's live under Available on {Config.BRAND_NAME} now."
+        )
+        if propagated:
+            text += f"\nAlso applied to {propagated} related title(s)."
+        await q.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[_preview_button(anime_id)]]))
+        return
+
+    PENDING_LINK[admin_id] = {
+        "details": details, "title": details["title"], "created": time.time(), "mode": "auto",
+    }
+    await q.edit_message_text(
+        f"Fetched: {details['title']}\n\n"
+        f"It won't be saved or show under Available until a join link is set for it."
+    )
+    await q.message.reply_text(
+        f"\U0001f4ce Now send a join link for {details['title']} as your next "
+        f"message (a Telegram @username, a t.me/ link, an invite link, or a channel ID) "
+        f"to finish adding the post."
+    )
+
+
+
+
+
+
+
+
+
+
+# --- Auto-search: plain text messages (no command) search the library ----
+
+def _display_name_from_user(tg_user) -> str:
+    if tg_user.username:
+        return f"@{tg_user.username}"
+    return tg_user.full_name or str(tg_user.id)
+
+
+async def send_anime_result(message, anime: dict):
+    """Bot search results only ever show the name — no genres, no
+    description — and the action button deep-links into the mini app at
+    that exact post instead of opening the raw channel link directly."""
+    await message.reply_text(anime["title"], reply_markup=InlineKeyboardMarkup([[_open_post_button(anime)]]))
+
+
+async def handle_searchpick(q, sid, idx):
+    session = SESSIONS.get(sid)
+    if not session:
+        await q.answer("Session expired — search again.", show_alert=True)
+        return
+    match = session["matches"][idx]
+    SESSIONS.pop(sid, None)
+    await q.answer()
+    await q.edit_message_text(match["title"], reply_markup=InlineKeyboardMarkup([[_open_post_button(match)]]))
+
+
+async def handle_quickadd(q, title: str):
+    if q.from_user.id not in Config.ADMIN_IDS:
+        await q.answer("Admins only.", show_alert=True)
+        return
+    await q.answer("Searching AniList...")
+    try:
+        data = await asyncio.to_thread(SOURCES["anilist"].search, title, 1)
+    except Exception:
+        await q.message.reply_text("Couldn't reach AniList right now. Try again.")
+        return
+    if not data["results"]:
+        await q.message.reply_text(f"No AniList results for '{title}'. Try again.")
+        return
+    sid = new_session(kind="addpost", query=title, source="anilist", page=1,
+                       results=data["results"], has_next=data["has_next"])
+    await send_results(q.message, sid)
+
+
+async def handle_pending_link_text(update: Update, pending: dict):
+    text = (update.message.text or "").strip()
+    try:
+        link = normalize_join_link(text)
+    except ValueError as e:
+        await update.message.reply_text(str(e))
+        return  # keep the pending state so they can just try again
+
+    admin_id = update.effective_user.id
+
+    if pending["mode"] == "auto":
+        if not link:
+            # This is a brand-new post that was never saved to MongoDB in
+            # the first place (see handle_pick) — with no link there's
+            # nothing worth keeping, so just drop the pending state.
+            PENDING_LINK.pop(admin_id, None)
+            await update.message.reply_text(
+                f"Cancelled — {pending['title']} wasn't saved since no join link was set."
+            )
+            return
+        anime_id = db.upsert_anime(pending["details"], added_by=admin_id)
+        db.update_link(anime_id, link)
+        propagated = db.propagate_join_link(anime_id, link)
+        PENDING_LINK.pop(admin_id, None)
+        keyboard = InlineKeyboardMarkup([[_preview_button(anime_id)]])
+        text = (
+            f"\u2705 Post created: {pending['title']}\n\n"
+            f"It's live under Available on {Config.BRAND_NAME} now."
+        )
+        if propagated:
+            text += f"\nAlso applied to {propagated} related title(s)."
+        await update.message.reply_text(text, reply_markup=keyboard)
+        return
+
+
+
+async def on_text_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Any plain-text message (not a command) is treated as an anime title
+    search against the local library — unless the sender has a pending
+    join-link prompt, in which case that takes priority."""
+    text = (update.message.text or "").strip()
+    admin_id = update.effective_user.id
+
+    pending = PENDING_LINK.get(admin_id)
+    if pending:
+        if time.time() - pending["created"] < PENDING_LINK_TTL:
+            await handle_pending_link_text(update, pending)
+            return
+        PENDING_LINK.pop(admin_id, None)
+
+    if len(text) < 2:
+        return
+
+    local_matches = await asyncio.to_thread(db.search_local, text)
+    if not local_matches:
+        keyboard = InlineKeyboardMarkup([[_search_in_app_button(text)]])
+        await update.message.reply_text(
+            f"'{text}' isn't posted yet. Open {Config.BRAND_NAME} to search and vote for it.",
+            reply_markup=keyboard,
+        )
+        return
+
+    if len(local_matches) == 1:
+        await send_anime_result(update.message, local_matches[0])
+        return
+
+    sid = new_session(kind="searchpick", matches=local_matches[:8])
+    rows = [[InlineKeyboardButton(m["title"], callback_data=f"searchpick:{sid}:{i}")]
+            for i, m in enumerate(local_matches[:8])]
+    rows.append([InlineKeyboardButton("Cancel", callback_data=f"cancel:{sid}")])
+    await update.message.reply_text(
+        f"Found {len(local_matches)} matches for '{text}':",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+# --- Notifications to the log channel -------------------------------------
+
+def notify_new_report(title: str, reason: str, details: str, reporter_name: str):
+    if not Config.LOG_CHANNEL_ID or not bot_app:
+        return
+    text = (
+        f"\U0001f6a9 New Report\n"
+        f"Anime: {title}\n"
+        f"Reason: {reason}\n"
+        + (f"Details: {details}\n" if details else "")
+        + f"By: {reporter_name}"
+    )
+    run_async(bot_app.bot.send_message(Config.LOG_CHANNEL_ID, text))
+
+
+def notify_vote_milestone(title: str, count: int):
+    if not Config.LOG_CHANNEL_ID or not bot_app:
+        return
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("\u2795 Add This Anime", callback_data=f"quickadd:{title[:200]}")
+    ]])
+    text = f"\U0001f525 {count} people are demanding \"{title}\" — consider adding it!"
+    run_async(bot_app.bot.send_message(Config.LOG_CHANNEL_ID, text, reply_markup=keyboard))
+
+
+# ---------------------------------------------------------------------------
+# Telegram WebApp initData verification
+# https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+# ---------------------------------------------------------------------------
 
 def verify_init_data(init_data: str) -> dict | None:
     if not init_data or not Config.BOT_TOKEN:
@@ -172,6 +449,8 @@ def is_admin(user: dict | None) -> bool:
     return bool(user) and user.get("id") in Config.ADMIN_IDS
 
 
+# A Telegram public username: 5-32 chars, must start with a letter, only
+# letters/digits/underscores after that (Telegram's own username rules).
 USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
 
 
@@ -191,7 +470,7 @@ async def _normalize_join_link_async(raw: str) -> str:
     """
     raw = (raw or "").strip()
     if not raw:
-        return ""  
+        return ""  # clearing the link is always allowed
 
     if raw.startswith("http://") or raw.startswith("https://"):
         if "t.me/" not in raw and "telegram.me/" not in raw:
@@ -226,6 +505,10 @@ def normalize_join_link(raw: str) -> str:
     return run_async(_normalize_join_link_async(raw))
 
 
+# ---------------------------------------------------------------------------
+# Web app + JSON API
+# ---------------------------------------------------------------------------
+
 @app.get("/")
 def index():
     return render_template("index.html", brand_name=Config.BRAND_NAME, brand_handle=Config.BRAND_HANDLE)
@@ -241,9 +524,8 @@ def api_trending():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_trending(page))
-    except Exception as exc:
-        app.logger.exception("AniList catalog request failed")
-        return jsonify({"error": f"AniList catalog request failed: {exc}"}), 502
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
 
 
 @app.get("/api/catalog/popular")
@@ -251,9 +533,8 @@ def api_popular():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_popular(page))
-    except Exception as exc:
-        app.logger.exception("AniList catalog request failed")
-        return jsonify({"error": f"AniList catalog request failed: {exc}"}), 502
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
 
 
 @app.get("/api/catalog/most-popular")
@@ -261,9 +542,8 @@ def api_most_popular():
     page = request.args.get("page", 1, type=int)
     try:
         return jsonify(SOURCES["anilist"].get_most_popular(page))
-    except Exception as exc:
-        app.logger.exception("AniList catalog request failed")
-        return jsonify({"error": f"AniList catalog request failed: {exc}"}), 502
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
 
 
 @app.post("/api/search/track")
@@ -332,15 +612,20 @@ def api_genre_browse(genre):
         return jsonify({"results": [], "has_next": False})
 
 
+@app.get("/api/notifications")
+def api_notifications():
+    return jsonify(db.list_notifications())
+
+
 @app.get("/api/catalog/available")
 def api_available():
-    
-    
-    
-    
-    
-    
-    
+    # A title is only ever saved without being deleted again while it has
+    # a join link (see upsert_anime/delete_anime_family in database.py),
+    # so in practice db.list_available() is already links-only. This
+    # filter is a defensive safety net for that invariant — e.g. any
+    # pre-existing data from before this behavior — so the public
+    # Available tab never shows an unjoinable title even if one somehow
+    # exists without a link.
     return jsonify([a for a in db.list_available() if a.get("available")])
 
 
@@ -412,6 +697,79 @@ def api_profile():
     return jsonify(profile)
 
 
+@app.patch("/api/anime/<int:anime_id>/link")
+def api_edit_link(anime_id):
+    user = current_user()
+    if not is_admin(user):
+        abort(403)
+    payload = request.get_json(force=True, silent=True) or {}
+    raw_link = (payload.get("link") or "").strip()
+    if not db.get_anime(anime_id):
+        abort(404)
+    try:
+        link = normalize_join_link(raw_link)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    if link:
+        db.update_link(anime_id, link)
+        propagated = db.propagate_join_link(anime_id, link)
+        return jsonify(status="updated", link=link, propagated=propagated)
+    # No link = not a real post anymore — delete it (and the rest of its
+    # franchise, which just lost the link via propagation) from MongoDB
+    # entirely, rather than leaving an unlinked, unjoinable entry behind.
+    propagated = db.delete_anime_family(anime_id)
+    return jsonify(status="deleted", link="", propagated=propagated)
+
+
+@app.post("/api/anime/link-anilist/<int:anilist_id>")
+def api_set_link_from_anilist(anilist_id):
+    """Set a join link for a title that's only been browsed from AniList
+    (Discover/Genre) and doesn't have a local library entry yet. Creates
+    that entry on the fly — from this point on it's a normal posted anime
+    and shows up in the Available tab, same as one added via the add flow."""
+    user = current_user()
+    if not is_admin(user):
+        abort(403)
+    payload = request.get_json(force=True, silent=True) or {}
+    raw_link = (payload.get("link") or "").strip()
+    if not raw_link:
+        return jsonify(error="A join link is required."), 400
+    try:
+        link = normalize_join_link(raw_link)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    try:
+        details = SOURCES["anilist"].get_details(anilist_id)
+    except requests.RequestException:
+        return jsonify(error="Couldn't fetch details from AniList right now."), 502
+    anime_id = db.upsert_anime(details, added_by=user["id"])
+    db.update_link(anime_id, link)
+    propagated = db.propagate_join_link(anime_id, link)
+    return jsonify(status="updated", anime=db.get_anime(anime_id), propagated=propagated)
+
+
+@app.get("/api/ads/active")
+def api_ads_active():
+    ad = db.get_active_ad()
+    if not ad:
+        return jsonify(None)
+    return jsonify({
+        "image_url": ad.get("image_url"),
+        "caption": ad.get("caption"),
+        "link": ad.get("link"),
+    })
+
+
+@app.post("/api/ads/tap")
+def api_ads_tap():
+    db.record_ad_tap()
+    return jsonify(status="ok")
+
+
+@app.post("/api/ads/click")
+def api_ads_click():
+    db.record_ad_click()
+    return jsonify(status="ok")
 
 
 def _telegram_user_label(user: dict) -> str:
@@ -420,6 +778,10 @@ def _telegram_user_label(user: dict) -> str:
     name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")]))
     return name or str(user.get("id"))
 
+
+# ---------------------------------------------------------------------------
+# Telegram webhook endpoint
+# ---------------------------------------------------------------------------
 
 @app.post("/webhook/<secret>")
 def webhook(secret):
@@ -430,12 +792,18 @@ def webhook(secret):
     return "ok"
 
 
+# ---------------------------------------------------------------------------
+# Bot startup
+# ---------------------------------------------------------------------------
+
 def build_bot_app() -> Application | None:
     if not Config.BOT_TOKEN:
         return None
     application = Application.builder().token(Config.BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("anidex", cmd_anidex))
+    application.add_handler(CallbackQueryHandler(on_callback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_search))
     return application
 
 
