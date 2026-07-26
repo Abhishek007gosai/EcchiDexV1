@@ -2,7 +2,6 @@
   "use strict";
 
   const brandName = document.body.dataset.brand || "Anime Eternals";
-  document.documentElement.dataset.theme = localStorage.getItem("touka-theme") || "dark";
 
   // ---------------------------------------------------------------------
   // Telegram WebApp bootstrap (no-ops gracefully outside Telegram)
@@ -12,9 +11,8 @@
     try {
       tg.ready();
       tg.expand();
-      const savedTheme = localStorage.getItem("touka-theme") || "dark";
-      tg.setHeaderColor && tg.setHeaderColor(savedTheme === "dark" ? "#111315" : "#f4f1e6");
-      tg.setBackgroundColor && tg.setBackgroundColor(savedTheme === "dark" ? "#111315" : "#f4f1e6");
+      tg.setHeaderColor && tg.setHeaderColor("#f4f1e6");
+      tg.setBackgroundColor && tg.setBackgroundColor("#f4f1e6");
     } catch (e) { /* not fatal */ }
   }
   const initData = tg ? tg.initData : "";
@@ -116,11 +114,9 @@
   const genreBrowseGrid = el("genre-browse-grid");
   const genreViewTitle = el("genre-view-title");
 
+  const pillTabs = document.querySelectorAll(".pill-tab");
   const tabAll = el("tab-all");
-  const homeTabs = el("home-tabs");
-  const tabAllBtn = el("tab-all-btn");
-  const tabAvailableBtn = el("tab-available-btn");
-  const availableSection = el("available-section");
+  const tabLibrary = el("tab-library");
 
   const scrollArea = el("scroll-area");
   const trendingRow = el("trending-row");
@@ -184,52 +180,43 @@
   let profile = null;
 
   const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+  // "#" comes first, same convention as Spotify/Apple Music/contacts apps,
+  // and catches anything starting with a digit — e.g. "86 -Eighty Six-",
+  // "5 Centimeters per Second", "009-1" — which would otherwise not match
+  // any A-Z button and become an orphaned, unreachable group.
+  const INDEX_KEYS = ["#", ...ALL_LETTERS];
 
-  function availableByTitle() {
-    const map = new Map();
-    available.forEach((a) => map.set(a.title.toLowerCase(), a));
-    return map;
+  function indexKeyFor(title) {
+    const ch = (title[0] || "").toUpperCase();
+    return /[0-9]/.test(ch) ? "#" : ch;
   }
 
-  // ---------------------------------------------------------------------
-  // Home All / Available tab switcher
-  // ---------------------------------------------------------------------
-  // All is the default view. Available is the same local library filtered
-  // to entries that currently have a Join Link.
-  async function setHomeTab(tab) {
-    const isAvailable = tab === "available";
-
-    // Keep the existing tab position and styling unchanged:
-    // All stays on the left, Available stays on the right.
-    tabAllBtn.classList.toggle("active", !isAvailable);
-    tabAvailableBtn.classList.toggle("active", isAvailable);
-    tabAllBtn.setAttribute("aria-selected", String(!isAvailable));
-    tabAvailableBtn.setAttribute("aria-selected", String(isAvailable));
-
-    // Switch only the content. All and Available are separate top-level
-    // sections, so the active tab can never accidentally show both views.
-    tabAll.classList.toggle("hidden", isAvailable);
-    availableSection.classList.toggle("hidden", !isAvailable);
-
-    if (isAvailable) {
-      // Refresh the shared catalogue before filtering so a newly added or
-      // removed Join Link is immediately reflected in Available.
-      try {
-        await loadAvailable();
-      } catch (_) {
-        // Keep the existing loaded data if refresh fails.
+  function buildAvailableIndex() {
+    // Matching purely by title text (the old approach) silently breaks
+    // whenever the posted library entry's title and the AniList discovery
+    // feed's title differ even slightly — different EN/romaji preference,
+    // punctuation, a manually edited title, etc. — so a join link you just
+    // added shows up in "Available" but the same anime in "All" still
+    // looks unlinked. AniList ids are stable, so prefer matching on that
+    // and only fall back to title text when an id isn't available.
+    const byId = new Map();
+    const byTitle = new Map();
+    available.forEach((a) => {
+      if (a.source === "anilist" && a.source_id != null) {
+        byId.set(String(a.source_id), a);
       }
-      renderLibraryTab();
-    }
-
-    renderAdSlot();
+      byTitle.set(a.title.toLowerCase(), a);
+    });
+    return {
+      match(item) {
+        if (item.anilist_id != null) {
+          const m = byId.get(String(item.anilist_id));
+          if (m) return m;
+        }
+        return byTitle.get((item.title || "").toLowerCase()) || null;
+      },
+    };
   }
-
-  tabAllBtn.addEventListener("click", () => setHomeTab("all"));
-  tabAvailableBtn.addEventListener("click", () => setHomeTab("available"));
-
-  // Always start on the All tab. Available stays hidden until tapped.
-  setHomeTab("all");
 
   // ---------------------------------------------------------------------
   // Top-level navigation (Home / Search / Profile)
@@ -357,13 +344,13 @@
   }
 
   // ---------------------------------------------------------------------
-  // Render: Home "All" tab — Trending, Top Airing, Popular, and Available library
+  // Render: Home "All" tab — Trending, Top Airing (+ Load more)
   // ---------------------------------------------------------------------
   function renderTrending() {
     trendingRow.innerHTML = "";
-    const byTitle = availableByTitle();
+    const availIndex = buildAvailableIndex();
     trending.forEach((item) => {
-      const matched = byTitle.get(item.title.toLowerCase());
+      const matched = availIndex.match(item);
       item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
       trendingRow.appendChild(trendingCard(item, () => openDiscoverDetail(item)));
     });
@@ -371,9 +358,9 @@
 
   function renderTopAiring() {
     topAiringList.innerHTML = "";
-    const byTitle = availableByTitle();
+    const availIndex = buildAvailableIndex();
     popular.forEach((item) => {
-      const matched = byTitle.get(item.title.toLowerCase());
+      const matched = availIndex.match(item);
       item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
       topAiringList.appendChild(topAiringCard(item, () => openDiscoverDetail(item)));
     });
@@ -438,24 +425,29 @@
   popularGridLoadMoreBtn.addEventListener("click", loadMorePopularGrid);
 
   // ---------------------------------------------------------------------
-  // Render: Available/library view (only local anime with a Join Link, A–Z)
+  // Pill tabs: All (discovery) / Available (posted library)
   // ---------------------------------------------------------------------
-  // Available is a filtered view of the same local anime library used by All.
-  // Only entries with a Join Link belong in Available.
-  function availableWithJoinLinks() {
-    return available.filter((a) => Boolean((a.join_link || "").trim()));
+  function setPillTab(tab) {
+    pillTabs.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    tabAll.classList.toggle("hidden", tab !== "all");
+    tabLibrary.classList.toggle("hidden", tab !== "library");
+    if (tab === "library") renderLibraryTab();
   }
+  pillTabs.forEach((b) => b.addEventListener("click", () => setPillTab(b.dataset.tab)));
 
+  // ---------------------------------------------------------------------
+  // Render: Available/library tab (posted catalog, A–Z)
+  // ---------------------------------------------------------------------
   function lettersWithData() {
-    return new Set(availableWithJoinLinks().map((a) => (a.title[0] || "").toUpperCase()));
+    return new Set(available.map((a) => indexKeyFor(a.title)));
   }
 
   function filteredLibrary() {
-    let list = availableWithJoinLinks();
+    let list = available;
     if (libraryQuery.trim()) {
       list = list.filter((a) => matchesLibraryQuery(a.title));
     } else if (activeLetter) {
-      list = list.filter((a) => a.title[0].toUpperCase() === activeLetter);
+      list = list.filter((a) => indexKeyFor(a.title) === activeLetter);
     }
     return [...list].sort((a, b) => a.title.localeCompare(b.title));
   }
@@ -463,7 +455,7 @@
   function renderLetterBar() {
     letterBar.innerHTML = "";
     const has = lettersWithData();
-    ALL_LETTERS.forEach((l) => {
+    INDEX_KEYS.forEach((l) => {
       const btn = document.createElement("button");
       btn.className = "letter-btn" + (activeLetter === l ? " active" : "");
       btn.textContent = l;
@@ -485,7 +477,7 @@
 
     const groups = {};
     list.forEach((a) => {
-      const l = a.title[0].toUpperCase();
+      const l = indexKeyFor(a.title);
       (groups[l] = groups[l] || []).push(a);
     });
 
@@ -822,14 +814,26 @@
       let result;
       if (linkTargetAnime.id) {
         result = await api(`/api/anime/${linkTargetAnime.id}/link`, { method: "PATCH", body: JSON.stringify({ link: value }) });
+        if (result.status === "deleted") {
+          // No link = the post itself (and any related title that only
+          // had this same link) was deleted from the database, not just
+          // hidden — so close out of it rather than trying to re-render
+          // detail actions for an anime that no longer exists.
+          closeLinkSheet();
+          closeDetailSheet();
+          showToast(result.propagated
+            ? `Removed — no join link was set (also removed ${result.propagated} related title(s))`
+            : "Removed — no join link was set");
+          await loadAvailable();
+          return;
+        }
         linkTargetAnime.join_link = value;
         if (currentDetail && currentDetail.id === linkTargetAnime.id) {
           currentDetail.join_link = value;
         }
       } else {
         // Not in the local library yet (Discover/Genre post) — this creates
-        // the library entry with the link already set, same result as
-        // /addpost + Set Join Link in one step.
+        // the library entry with the link already set in one step.
         result = await api(`/api/anime/link-anilist/${linkTargetAnime.anilist_id}`, {
           method: "POST",
           body: JSON.stringify({ link: value }),
@@ -845,7 +849,9 @@
       }
       if (currentDetail) renderDetailAction(currentDetail, currentContext);
       closeLinkSheet();
-      showToast(result.propagated ? `Link saved — applied to ${result.propagated} related season(s) too` : "Link saved");
+      showToast(result.propagated
+        ? `Link saved — applied to ${result.propagated} related title(s) too`
+        : "Link saved");
       await loadAvailable();
     } catch (err) {
       showToast(err.message || "Couldn't save link");
@@ -1190,79 +1196,24 @@
     return (name || "?").trim().charAt(0).toUpperCase();
   }
 
-  function applyTheme(theme) {
-    const normalized = theme === "dark" ? "dark" : "light";
-    document.documentElement.dataset.theme = normalized;
-    localStorage.setItem("touka-theme", normalized);
-    const themeMeta = document.getElementById("theme-color-meta");
-    if (themeMeta) themeMeta.setAttribute("content", normalized === "dark" ? "#111315" : "#f4f1e6");
-    if (tg) {
-      try {
-        tg.setHeaderColor && tg.setHeaderColor(normalized === "dark" ? "#111315" : "#f4f1e6");
-        tg.setBackgroundColor && tg.setBackgroundColor(normalized === "dark" ? "#111315" : "#f4f1e6");
-      } catch (e) {}
-    }
-    document.querySelectorAll(".theme-option").forEach((option) => {
-      const selected = option.dataset.themeOption === normalized;
-      option.classList.toggle("selected", selected);
-      option.setAttribute("aria-checked", String(selected));
-    });
-  }
-
-  function renderProfileAvatar(profile, displayName) {
-    if (profile.photo_url) {
-      return `<img class="profile-avatar profile-avatar-image" src="${escapeHtml(profile.photo_url)}" alt="Profile photo" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'profile-avatar', textContent:'${escapeHtml(initials(displayName))}'}))">`;
-    }
-    return `<div class="profile-avatar">${escapeHtml(initials(displayName))}</div>`;
-  }
-
-  function formatJoinedDate(timestamp) {
-    if (!timestamp) return null;
-    const date = new Date(Number(timestamp) * 1000);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-  }
-
   async function openProfile() {
     profileCard.innerHTML = `<p class="profile-hint">Loading profile\u2026</p>`;
     try {
       profile = await api("/api/profile");
-      const displayName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || profile.username || "User";
-      const joined = formatJoinedDate(profile.registered_at);
+      const displayName = profile.first_name || profile.username || "User";
       profileCard.innerHTML = `
-        <div class="profile-card-main">
-          <div class="profile-header">
-            ${renderProfileAvatar(profile, displayName)}
-            <div class="profile-identity">
-              <div class="profile-name">${escapeHtml(displayName)}</div>
-              <div class="profile-username">${profile.username ? "@" + escapeHtml(profile.username) : "no username"}</div>
-            </div>
-          </div>
-          <div class="profile-row"><span class="label">Telegram ID</span><span class="value">${escapeHtml(String(profile.telegram_id))}</span></div>
-          <div class="profile-row"><span class="label">Registered in bot</span><span class="value">yes</span></div>
-          <div class="profile-row"><span class="label">Role</span><span class="value profile-status">${escapeHtml(profile.role || "member")}</span></div>
-          <div class="profile-row"><span class="label">Access</span><span class="value profile-status">${escapeHtml(profile.access || "active")}</span></div>
-          ${joined ? `<div class="profile-row"><span class="label">Joined on</span><span class="value">${escapeHtml(joined)}</span></div>` : ""}
-        </div>
-        <div class="appearance-section">
-          <div class="appearance-heading">
-            <span class="appearance-icon">◉</span>
-            <div><h3>Appearance</h3><p>Choose your preferred theme</p></div>
-          </div>
-          <div class="theme-options" role="radiogroup" aria-label="Theme preference">
-            <button type="button" class="theme-option" data-theme-option="light" role="radio" aria-checked="false">
-              <span class="theme-symbol">☀</span><span class="theme-copy"><strong>Light Mode</strong><small>Use light theme</small></span><span class="theme-radio"></span>
-            </button>
-            <button type="button" class="theme-option" data-theme-option="dark" role="radio" aria-checked="false">
-              <span class="theme-symbol">☾</span><span class="theme-copy"><strong>Dark Mode</strong><small>Use dark theme</small></span><span class="theme-radio"></span>
-            </button>
+        <div class="profile-header">
+          <div class="profile-avatar">${initials(displayName)}</div>
+          <div>
+            <div class="profile-name">${escapeHtml(displayName)}</div>
+            <div class="profile-username">${profile.username ? "@" + escapeHtml(profile.username) : "no username"}</div>
           </div>
         </div>
+        <div class="profile-row"><span class="label">Telegram ID</span><span class="value">${profile.telegram_id}</span></div>
+        <div class="profile-row"><span class="label">Registered in bot</span><span class="value">yes</span></div>
+        <div class="profile-row"><span class="label">Role</span><span class="value">${escapeHtml(profile.role)}</span></div>
+        <div class="profile-row"><span class="label">Access</span><span class="value">${escapeHtml(profile.access)}</span></div>
       `;
-      document.querySelectorAll(".theme-option").forEach((option) => {
-        option.addEventListener("click", () => applyTheme(option.dataset.themeOption));
-      });
-      applyTheme(localStorage.getItem("touka-theme") || "dark");
     } catch (err) {
       profileCard.innerHTML = `<p class="profile-hint">${escapeHtml(err.message || "Open this from inside Telegram to view your profile.")}</p>`;
     }
@@ -1303,7 +1254,12 @@
     } catch (err) {
       available = [];
     }
-    renderLibraryTab();
+    if (!tabLibrary.classList.contains("hidden")) renderLibraryTab();
+    if (!tabAll.classList.contains("hidden")) {
+      renderTrending();
+      renderTopAiring();
+      renderPopularGrid();
+    }
   }
 
   async function loadAd() {
@@ -1346,7 +1302,6 @@
   (async function init() {
     document.title = brandName;
     await Promise.all([loadDiscover(), loadAvailable(), loadAd(), preloadProfile()]);
-    setHomeTab("all");
     applyDeepLink();
   })();
 })();
