@@ -13,6 +13,7 @@ plain keys (anime "id", not "_id"), lists for genres, etc.
 import time
 
 from pymongo import ASCENDING, MongoClient
+from pymongo.errors import DuplicateKeyError
 
 from config import Config
 
@@ -141,16 +142,29 @@ def upsert_anime(details: dict, added_by: int | None = None) -> int:
     inherited_link = find_inherited_link(details["source"], related_ids)
 
     new_id = _next_id("anime")
-    anime_col.insert_one({
-        "_id": new_id,
-        "source": details["source"],
-        "source_id": str(details["source_id"]),
-        "join_link": inherited_link,
-        "added_by": added_by,
-        "created_at": now,
-        **fields,
-    })
-    return new_id
+    try:
+        anime_col.insert_one({
+            "_id": new_id,
+            "source": details["source"],
+            "source_id": str(details["source_id"]),
+            "join_link": inherited_link,
+            "added_by": added_by,
+            "created_at": now,
+            **fields,
+        })
+        return new_id
+    except DuplicateKeyError:
+        # A concurrent call for this exact (source, source_id) — e.g. two
+        # overlapping franchise-propagation runs both discovering the same
+        # unposted related title at the same time, or a client/proxy
+        # retrying a slow request — already inserted it between our
+        # existence check above and this insert. That other insert wins;
+        # just update the doc it created instead of crashing.
+        existing = anime_col.find_one({"source": details["source"], "source_id": str(details["source_id"])})
+        if not existing:
+            raise  # shouldn't happen — surface it rather than hide a real bug
+        anime_col.update_one({"_id": existing["_id"]}, {"$set": fields})
+        return existing["_id"]
 
 
 def delete_anime(anime_id: int):
