@@ -36,8 +36,6 @@ bot runs in the same process via a Telegram webhook.
   API automatically (the bot must be an admin in that channel);
   @usernames and t.me links are normalized the same way the "Set Join
   Link" field always claimed to support.
-- **Season auto-linking** — setting a join link (via `/addpost`'s
-  follow-up, `/editpost`, or the mini app's ➕ editor) automatically
   applies the same link to any other posted season AniList lists as a
   direct prequel/sequel of that title. Adding a new season later also
   auto-inherits the link if a directly related season is already linked
@@ -132,10 +130,8 @@ See `koyeb.yaml` for the equivalent CLI command.
   `search` / `get_details` methods and registering it in
   `plugins/__init__.py`. MyAnimeList (via the Jikan API) was tried and
   removed — too unreliable in practice.
-- The bot keeps `/addpost` and `/delpost` conversation state in memory —
   run the web process with a **single worker** (already set in `Dockerfile`
   and `render.yaml`); multiple workers would each have their own copy and
   break the multi-step flows.
-- Join links are stored as plain URLs you provide via `/addpost` follow-up
   editing or the in-app editor — this project doesn't source, scrape, or
   curate content itself.
