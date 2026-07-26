@@ -2,6 +2,7 @@
   "use strict";
 
   const brandName = document.body.dataset.brand || "Anime Eternals";
+  document.documentElement.dataset.theme = localStorage.getItem("touka-theme") === "dark" ? "dark" : "light";
 
   // ---------------------------------------------------------------------
   // Telegram WebApp bootstrap (no-ops gracefully outside Telegram)
@@ -11,8 +12,9 @@
     try {
       tg.ready();
       tg.expand();
-      tg.setHeaderColor && tg.setHeaderColor("#f4f1e6");
-      tg.setBackgroundColor && tg.setBackgroundColor("#f4f1e6");
+      const savedTheme = localStorage.getItem("touka-theme") || "light";
+      tg.setHeaderColor && tg.setHeaderColor(savedTheme === "dark" ? "#111315" : "#f4f1e6");
+      tg.setBackgroundColor && tg.setBackgroundColor(savedTheme === "dark" ? "#111315" : "#f4f1e6");
     } catch (e) { /* not fatal */ }
   }
   const initData = tg ? tg.initData : "";
@@ -1188,24 +1190,79 @@
     return (name || "?").trim().charAt(0).toUpperCase();
   }
 
+  function applyTheme(theme) {
+    const normalized = theme === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = normalized;
+    localStorage.setItem("touka-theme", normalized);
+    const themeMeta = document.getElementById("theme-color-meta");
+    if (themeMeta) themeMeta.setAttribute("content", normalized === "dark" ? "#111315" : "#f4f1e6");
+    if (tg) {
+      try {
+        tg.setHeaderColor && tg.setHeaderColor(normalized === "dark" ? "#111315" : "#f4f1e6");
+        tg.setBackgroundColor && tg.setBackgroundColor(normalized === "dark" ? "#111315" : "#f4f1e6");
+      } catch (e) {}
+    }
+    document.querySelectorAll(".theme-option").forEach((option) => {
+      const selected = option.dataset.themeOption === normalized;
+      option.classList.toggle("selected", selected);
+      option.setAttribute("aria-checked", String(selected));
+    });
+  }
+
+  function renderProfileAvatar(profile, displayName) {
+    if (profile.photo_url) {
+      return `<img class="profile-avatar profile-avatar-image" src="${escapeHtml(profile.photo_url)}" alt="Profile photo" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'profile-avatar', textContent:'${escapeHtml(initials(displayName))}'}))">`;
+    }
+    return `<div class="profile-avatar">${escapeHtml(initials(displayName))}</div>`;
+  }
+
+  function formatJoinedDate(timestamp) {
+    if (!timestamp) return null;
+    const date = new Date(Number(timestamp) * 1000);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
   async function openProfile() {
     profileCard.innerHTML = `<p class="profile-hint">Loading profile\u2026</p>`;
     try {
       profile = await api("/api/profile");
-      const displayName = profile.first_name || profile.username || "User";
+      const displayName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || profile.username || "User";
+      const joined = formatJoinedDate(profile.registered_at);
       profileCard.innerHTML = `
-        <div class="profile-header">
-          <div class="profile-avatar">${initials(displayName)}</div>
-          <div>
-            <div class="profile-name">${escapeHtml(displayName)}</div>
-            <div class="profile-username">${profile.username ? "@" + escapeHtml(profile.username) : "no username"}</div>
+        <div class="profile-card-main">
+          <div class="profile-header">
+            ${renderProfileAvatar(profile, displayName)}
+            <div class="profile-identity">
+              <div class="profile-name">${escapeHtml(displayName)}</div>
+              <div class="profile-username">${profile.username ? "@" + escapeHtml(profile.username) : "no username"}</div>
+            </div>
+          </div>
+          <div class="profile-row"><span class="label">Telegram ID</span><span class="value">${escapeHtml(String(profile.telegram_id))}</span></div>
+          <div class="profile-row"><span class="label">Registered in bot</span><span class="value">yes</span></div>
+          <div class="profile-row"><span class="label">Role</span><span class="value profile-status">${escapeHtml(profile.role || "member")}</span></div>
+          <div class="profile-row"><span class="label">Access</span><span class="value profile-status">${escapeHtml(profile.access || "active")}</span></div>
+          ${joined ? `<div class="profile-row"><span class="label">Joined on</span><span class="value">${escapeHtml(joined)}</span></div>` : ""}
+        </div>
+        <div class="appearance-section">
+          <div class="appearance-heading">
+            <span class="appearance-icon">◉</span>
+            <div><h3>Appearance</h3><p>Choose your preferred theme</p></div>
+          </div>
+          <div class="theme-options" role="radiogroup" aria-label="Theme preference">
+            <button type="button" class="theme-option" data-theme-option="light" role="radio" aria-checked="false">
+              <span class="theme-symbol">☀</span><span class="theme-copy"><strong>Light Mode</strong><small>Use light theme</small></span><span class="theme-radio"></span>
+            </button>
+            <button type="button" class="theme-option" data-theme-option="dark" role="radio" aria-checked="false">
+              <span class="theme-symbol">☾</span><span class="theme-copy"><strong>Dark Mode</strong><small>Use dark theme</small></span><span class="theme-radio"></span>
+            </button>
           </div>
         </div>
-        <div class="profile-row"><span class="label">Telegram ID</span><span class="value">${profile.telegram_id}</span></div>
-        <div class="profile-row"><span class="label">Registered in bot</span><span class="value">yes</span></div>
-        <div class="profile-row"><span class="label">Role</span><span class="value">${escapeHtml(profile.role)}</span></div>
-        <div class="profile-row"><span class="label">Access</span><span class="value">${escapeHtml(profile.access)}</span></div>
       `;
+      document.querySelectorAll(".theme-option").forEach((option) => {
+        option.addEventListener("click", () => applyTheme(option.dataset.themeOption));
+      });
+      applyTheme(localStorage.getItem("touka-theme") || "light");
     } catch (err) {
       profileCard.innerHTML = `<p class="profile-hint">${escapeHtml(err.message || "Open this from inside Telegram to view your profile.")}</p>`;
     }
