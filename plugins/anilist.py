@@ -46,7 +46,7 @@ query ($id: Int) {
     relations {
       edges {
         relationType
-        node { id type }
+        node { id type title { romaji english } coverImage { large } }
       }
     }
   }
@@ -186,10 +186,17 @@ class AniListSource(AnimeSource):
             "ALTERNATIVE", "SPIN_OFF", "SUMMARY", "COMPILATION", "CONTAINS",
         }
         related_ids = []
+        relations = []
         for edge in (m.get("relations") or {}).get("edges", []):
             node = edge.get("node") or {}
             if edge.get("relationType") in SAME_FRANCHISE_RELATIONS and node.get("type") == "ANIME":
                 related_ids.append(node["id"])
+                relations.append({
+                    "source_id": node["id"],
+                    "type": edge["relationType"],
+                    "title": _best_title(node.get("title") or {}),
+                    "poster_url": (node.get("coverImage") or {}).get("large"),
+                })
 
         return {
             "source": self.name,
@@ -207,6 +214,7 @@ class AniListSource(AnimeSource):
             "format": m.get("format"),
             "duration": m.get("duration"),
             "related_ids": related_ids,
+            "relations": relations,
         }
 
     # -- Extra: powers Home's Trending/Top Airing feeds (not part of the shared interface) --
