@@ -139,6 +139,7 @@
   const detailGenres = el("detail-genres");
   const detailDescription = el("detail-description");
   const detailReadMore = el("detail-readmore");
+  const detailRelated = el("detail-related");
   const detailActionArea = el("detail-action-area");
   const reportOpenBtn = el("report-open-btn");
 
@@ -579,6 +580,7 @@
     });
 
     renderDescription();
+    renderRelated(anime);
     renderDetailAction(anime, context);
     detailOverlay.classList.remove("hidden");
   }
@@ -597,6 +599,53 @@
     detailDescription.classList.toggle("clamped", !descriptionExpanded);
     detailReadMore.classList.toggle("hidden", text.length < 180);
     detailReadMore.textContent = descriptionExpanded ? "Show Less" : "Read More";
+  }
+
+  function humanizeRelationType(type) {
+    return (type || "")
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  function renderRelated(anime) {
+    detailRelated.innerHTML = "";
+    const related = anime.related_posted || [];
+    detailRelated.classList.toggle("hidden", related.length === 0);
+    related.forEach((rel) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "related-card";
+
+      const thumb = document.createElement("div");
+      thumb.className = "related-card-thumb";
+      thumbImg(thumb, rel.poster_url, rel.title);
+      card.appendChild(thumb);
+
+      const text = document.createElement("div");
+      text.className = "related-card-text";
+      const label = document.createElement("span");
+      label.className = "related-card-label";
+      label.textContent = "\u25c0 " + humanizeRelationType(rel.relation_type).toUpperCase();
+      const title = document.createElement("span");
+      title.className = "related-card-title";
+      title.textContent = rel.title;
+      text.appendChild(label);
+      text.appendChild(title);
+      card.appendChild(text);
+
+      card.addEventListener("click", () => openRelatedDetail(rel.id));
+      detailRelated.appendChild(card);
+    });
+  }
+
+  async function openRelatedDetail(localAnimeId) {
+    try {
+      const full = await api(`/api/anime/${localAnimeId}`);
+      openDetailSheet(full, "available");
+    } catch (err) {
+      showToast("Couldn't load that title.");
+    }
   }
 
   detailReadMore.addEventListener("click", () => {
@@ -697,8 +746,17 @@
     detailActionArea.appendChild(row);
   }
 
-  function openLocalDetail(item) {
+  async function openLocalDetail(item) {
     openDetailSheet(item, "available");
+    try {
+      const full = await api(`/api/anime/${item.id}`);
+      if (currentDetail && currentDetail.id === item.id) {
+        openDetailSheet({ ...item, ...full }, "available");
+      }
+    } catch (err) {
+      // Keep showing what we already had — related-title cards just won't
+      // appear if this quiet enrichment fetch fails.
+    }
   }
 
   async function openDiscoverDetail(item) {
