@@ -437,12 +437,54 @@
   // ---------------------------------------------------------------------
   // Render: Available/library tab (posted catalog, A–Z)
   // ---------------------------------------------------------------------
+  function primaryAvailableList() {
+    // A franchise with many posted seasons/OVAs/movies would otherwise
+    // fill the Available grid with one row per title. Instead, group them
+    // by walking each title's relations (already on every available[]
+    // item) and show only one representative per franchise — the
+    // earliest-released entry, e.g. Season 1 — with the rest reachable via
+    // the Prequel/Sequel cards inside that title's detail view.
+    const bySourceId = new Map();
+    available.forEach((a) => {
+      if (a.source === "anilist" && a.source_id != null) bySourceId.set(String(a.source_id), a);
+    });
+
+    const visited = new Set();
+    const primaries = [];
+
+    available.forEach((start) => {
+      const startKey = String(start.id);
+      if (visited.has(startKey)) return;
+
+      const group = [];
+      const frontier = [start];
+      const localSeen = new Set([startKey]);
+      while (frontier.length) {
+        const cur = frontier.pop();
+        group.push(cur);
+        (cur.related_ids || []).forEach((rid) => {
+          const relItem = bySourceId.get(String(rid));
+          if (relItem && !localSeen.has(String(relItem.id))) {
+            localSeen.add(String(relItem.id));
+            frontier.push(relItem);
+          }
+        });
+      }
+      group.forEach((g) => visited.add(String(g.id)));
+
+      group.sort((x, y) => (x.year || 9999) - (y.year || 9999) || x.id - y.id);
+      primaries.push(group[0]);
+    });
+
+    return primaries;
+  }
+
   function lettersWithData() {
-    return new Set(available.map((a) => indexKeyFor(a.title)));
+    return new Set(primaryAvailableList().map((a) => indexKeyFor(a.title)));
   }
 
   function filteredLibrary() {
-    let list = available;
+    let list = primaryAvailableList();
     if (libraryQuery.trim()) {
       list = list.filter((a) => matchesLibraryQuery(a.title));
     } else if (activeLetter) {
@@ -626,7 +668,10 @@
       text.className = "related-card-text";
       const label = document.createElement("span");
       label.className = "related-card-label";
-      label.textContent = "\u25c0 " + humanizeRelationType(rel.relation_type).toUpperCase();
+      const typeLabel = humanizeRelationType(rel.relation_type).toUpperCase();
+      if (rel.relation_type === "PREQUEL") label.textContent = "\u25c0 " + typeLabel;
+      else if (rel.relation_type === "SEQUEL") label.textContent = typeLabel + " \u25b6";
+      else label.textContent = typeLabel;
       const title = document.createElement("span");
       title.className = "related-card-title";
       title.textContent = rel.title;
