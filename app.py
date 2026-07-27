@@ -462,11 +462,31 @@ def api_available():
     return jsonify([a for a in db.list_available() if a.get("available")])
 
 
+def _related_posted(source: str, relations: list[dict]) -> list[dict]:
+    """Cross-references a title's typed relations (Prequel/Sequel/Side
+    Story/etc., from plugins/anilist.py's get_details) against what's
+    actually posted, so the detail sheet can show a "jump to the other
+    season" card only for titles that are actually joinable — not every
+    AniList relation, most of which won't be posted."""
+    out = []
+    for rel in relations:
+        posted = db.find_by_source_id(source, rel["source_id"])
+        if posted and posted.get("join_link"):
+            out.append({
+                "id": posted["id"],
+                "title": posted["title"],
+                "poster_url": posted.get("poster_url"),
+                "relation_type": rel["type"],
+            })
+    return out
+
+
 @app.get("/api/anime/<int:anime_id>")
 def api_anime_detail(anime_id):
     anime = db.get_anime(anime_id)
     if not anime:
         abort(404)
+    anime["related_posted"] = _related_posted(anime["source"], anime.get("relations") or [])
     return jsonify(anime)
 
 
@@ -475,9 +495,11 @@ def api_anilist_details(anilist_id):
     """Full details (genres/synopsis/banner) for a Trending/Popular card —
     the lightweight discovery query doesn't include those fields."""
     try:
-        return jsonify(SOURCES["anilist"].get_details(anilist_id))
+        details = SOURCES["anilist"].get_details(anilist_id)
     except requests.RequestException:
         abort(502)
+    details["related_posted"] = _related_posted(details["source"], details.get("relations") or [])
+    return jsonify(details)
 
 
 @app.post("/api/vote")
