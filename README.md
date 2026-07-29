@@ -8,13 +8,11 @@ bot runs in the same process via a Telegram webhook.
 
 - **`/anidex`** — welcome message with an Open Mini App button (`/start` stays silent).
   The message text is fully editable via `START_MSG` (see `.env.example`).
-- **Auto-search** — send the bot any plain text (not a command), in a
-  private chat with it, and it searches your **Available** library only,
-  replying with just the title and a button that deep-links straight into
-  the mini app at that exact post. If nothing matches, it offers to open
-  the mini app's Search page, pre-searched. Every reply auto-deletes itself
-  2 minutes later to keep the chat tidy. (Group chats are intentionally
-  not supported — the bot only responds in its own private chat.)
+- **Auto-search** — send the bot any plain text (not a command) and it
+  searches your **Available** library only, replying with just the
+  title and a button that deep-links straight into the mini app at that
+  exact post. If nothing matches, it offers to open the mini app's Search
+  page, pre-searched.
 - **Mini app** — bottom nav is **Home / Search / Profile**.
   Home has an **All / Available** pill switch: All shows Trending Now, a
   horizontally-scrolling Top Airing row, and a Popular grid (with Load
@@ -22,22 +20,11 @@ bot runs in the same process via a Telegram webhook.
   bucket for numeric-leading titles). Search is a dedicated page with
   Popular Searches (tracked in MongoDB) and genre tiles that browse
   AniList by genre.
-- **Franchise navigation** — a post's detail sheet shows at most two
-  related-title cards, Prequel and Sequel, that step through the whole
-  franchise (every posted season, OVA, movie, and spin-off) in release
-  order — never one card per AniList relation edge.
-- **Requests** — any Trending/Top Airing/genre item that isn't posted yet
-  shows a Request button instead of Join. Requesting posts the title (with
-  poster, requester, and Accept/Reject buttons) to your log channel.
-  Accept resolves immediately; Reject opens a quick-reason submenu (not in
-  our source/licensing, already posted, no good release yet, other) so the
-  requester gets a real reason instead of a generic one. Either way, the
-  requester sees it next time they open the bell icon in the mini app's
-  header — empty until one of their requests is actually resolved. Setting
-  a join link on a title also auto-accepts any pending request that
-  matches it, without a separate admin step. If an item's title matches an
-  Available post that already has a join link, it shows Join instead of
-  Request automatically.
+- **Voting** — any Trending/Top Airing/genre item that isn't posted yet
+  shows a Vote button instead of Join. Every 20 votes, your log channel
+  gets a "people are demanding this" notification. If an item's title
+  matches an Available post that already has a join link, it shows Join
+  instead of Vote automatically.
 - **Report** — Available posts only (not discovery or genre items).
   Preset reasons + optional 50-character note, sent to your log channel.
 - **Profile** — Telegram ID, registration status, role, access, verified
