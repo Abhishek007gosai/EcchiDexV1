@@ -46,12 +46,6 @@
     themeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.themeChoice === theme));
   }
 
-  themeButtons.forEach((btn) => {
-    btn.addEventListener("click", () => applyTheme(btn.dataset.themeChoice));
-  });
-
-  applyTheme(currentTheme());
-
   function authHeaders() {
     return initData ? { "X-Telegram-Init-Data": initData } : {};
   }
@@ -196,6 +190,10 @@
   const profileCard = el("profile-card");
   const themeToggle = el("theme-toggle");
   const themeButtons = themeToggle ? themeToggle.querySelectorAll(".pill-tab") : [];
+  themeButtons.forEach((btn) => {
+    btn.addEventListener("click", () => applyTheme(btn.dataset.themeChoice));
+  });
+  applyTheme(currentTheme());
 
   const toast = el("toast");
   let toastTimer = null;
