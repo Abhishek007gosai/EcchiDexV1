@@ -33,7 +33,7 @@ query ($id: Int) {
   Media(id: $id, type: ANIME) {
     id
     title { romaji english }
-    startDate { year }
+    startDate { year month day }
     coverImage { large extraLarge }
     bannerImage
     description(asHtml: false)
@@ -204,6 +204,8 @@ class AniListSource(AnimeSource):
             "title": main_title,
             "alt_title": alt_title,
             "year": (m.get("startDate") or {}).get("year"),
+            "start_month": (m.get("startDate") or {}).get("month"),
+            "start_day": (m.get("startDate") or {}).get("day"),
             "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
             "banner_url": m.get("bannerImage"),
             "description": _clean_description(m.get("description")),
