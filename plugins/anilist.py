@@ -3,11 +3,13 @@ AniList adapter — public GraphQL API, no API key required.
 https://anilist.gitbook.io/anilist-apiv2-docs/
 """
 
+import threading
 import time
 
 import requests
 
 from config import Config
+from database import database as db
 from plugins.base import AnimeSource
 
 SEARCH_QUERY = """
@@ -33,7 +35,7 @@ query ($id: Int) {
   Media(id: $id, type: ANIME) {
     id
     title { romaji english }
-    startDate { year month day }
+    startDate { year }
     coverImage { large extraLarge }
     bannerImage
     description(asHtml: false)
@@ -121,6 +123,12 @@ class AniListSource(AnimeSource):
 
     def __init__(self):
         self._cache: dict[str, tuple[float, dict]] = {}
+        # Keys currently being refreshed in the background, so a burst of
+        # requests for the same stale key (e.g. several users opening the
+        # app at once right after a restart) triggers one AniList refetch,
+        # not one per request.
+        self._refreshing: set[str] = set()
+        self._refresh_lock = threading.Lock()
 
     def _post(self, query: str, variables: dict) -> dict:
         # AniList's public API rate-limits aggressively. When several
@@ -164,12 +172,7 @@ class AniListSource(AnimeSource):
             })
         return {"results": results, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
-    def get_details(self, source_id, use_cache: bool = True) -> dict:
-        if use_cache:
-            return self._cached(f"details:{source_id}", lambda: self._fetch_details(source_id))
-        return self._fetch_details(source_id)
-
-    def _fetch_details(self, source_id) -> dict:
+    def get_details(self, source_id) -> dict:
         data = self._post(DETAILS_QUERY, {"id": int(source_id)})
         m = data["Media"]
         score = m.get("averageScore")
@@ -209,8 +212,6 @@ class AniListSource(AnimeSource):
             "title": main_title,
             "alt_title": alt_title,
             "year": (m.get("startDate") or {}).get("year"),
-            "start_month": (m.get("startDate") or {}).get("month"),
-            "start_day": (m.get("startDate") or {}).get("day"),
             "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
             "banner_url": m.get("bannerImage"),
             "description": _clean_description(m.get("description")),
@@ -226,13 +227,51 @@ class AniListSource(AnimeSource):
 
     # -- Extra: powers Home's Trending/Top Airing feeds (not part of the shared interface) --
 
+    def _refresh_in_background(self, key: str, fetch):
+        with self._refresh_lock:
+            if key in self._refreshing:
+                return  # already being refreshed by another request/thread
+            self._refreshing.add(key)
+
+        def run():
+            try:
+                value = fetch()
+                self._cache[key] = (time.time(), value)
+                db.set_catalog_cache(key, value)
+            except requests.RequestException:
+                pass  # keep serving the stale value; we'll retry next time
+            finally:
+                with self._refresh_lock:
+                    self._refreshing.discard(key)
+
+        threading.Thread(target=run, daemon=True).start()
+
     def _cached(self, key: str, fetch):
+        """Three tiers, fastest first:
+        1. In-memory — instant, but empty on every fresh process.
+        2. MongoDB — survives restarts. If what's there is stale, still
+           serve it immediately and refresh it in the background, so no
+           request ever blocks on a live AniList call once *something*
+           has been cached for this key.
+        3. Live AniList fetch — only when this key has genuinely never
+           been cached anywhere before.
+        """
         now = time.time()
+
         cached = self._cache.get(key)
         if cached and now - cached[0] < Config.CATALOG_CACHE_TTL:
             return cached[1]
+
+        persisted = db.get_catalog_cache(key)
+        if persisted:
+            self._cache[key] = (persisted["cached_at"], persisted["value"])
+            if now - persisted["cached_at"] >= Config.CATALOG_CACHE_TTL:
+                self._refresh_in_background(key, fetch)
+            return persisted["value"]
+
         value = fetch()
         self._cache[key] = (now, value)
+        db.set_catalog_cache(key, value)
         return value
 
     def _discover(self, sort: str, page: int = 1, query: str = DISCOVER_QUERY, cache_prefix: str = "") -> dict:

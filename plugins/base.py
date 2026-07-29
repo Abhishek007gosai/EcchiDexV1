@@ -34,8 +34,6 @@ class AnimeSource(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_details(self, source_id, use_cache: bool = True) -> dict:
-        """Return the full normalized detail dict for one title. Implementations
-        that cache are expected to honor use_cache=False for callers that need
-        a guaranteed-fresh read (e.g. an admin explicitly refreshing a post)."""
+    def get_details(self, source_id) -> dict:
+        """Return the full normalized detail dict for one title."""
         raise NotImplementedError
