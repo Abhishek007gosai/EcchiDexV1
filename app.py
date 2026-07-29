@@ -22,6 +22,7 @@ import hmac
 import json
 import re
 import secrets
+import threading
 import time
 from urllib.parse import parse_qsl, quote
 
@@ -162,6 +163,24 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_searchpick(q, sid, int(idx))
         return
 
+    if action == "reqaccept":
+        await handle_request_accept(q, parts[1] if len(parts) > 1 else None)
+        return
+
+    if action == "reqreject":
+        await show_reject_reasons(q, parts[1] if len(parts) > 1 else None)
+        return
+
+    if action == "reqreason":
+        # data shape: reqreason:<request_id>:<reason_code>
+        await handle_request_reject(q, parts[1] if len(parts) > 1 else None,
+                                     parts[2] if len(parts) > 2 else "other")
+        return
+
+    if action == "reqback":
+        await show_accept_reject(q, parts[1] if len(parts) > 1 else None)
+        return
+
     await q.answer()
 
 
@@ -173,11 +192,34 @@ def _display_name_from_user(tg_user) -> str:
     return tg_user.full_name or str(tg_user.id)
 
 
+def _delete_message_later(chat_id: int, message_id: int, delay: float = 120):
+    """Deletes a bot message `delay` seconds after it's sent (used for the
+    plain-text search replies). Runs on a plain threading.Timer rather than
+    an asyncio task: this process drives its event loop synchronously, once
+    per incoming webhook request (see the module docstring) — nothing keeps
+    it spinning in between, so an asyncio-scheduled sleep/timer would only
+    ever get a chance to progress whenever some unrelated update happened
+    to arrive, firing arbitrarily late or not at all. A Timer thread making
+    a plain HTTP call sidesteps that, and avoids touching the bot's async
+    HTTP client from a different thread/loop."""
+    def _do_delete():
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{Config.BOT_TOKEN}/deleteMessage",
+                json={"chat_id": chat_id, "message_id": message_id},
+                timeout=10,
+            )
+        except requests.RequestException:
+            pass
+    threading.Timer(delay, _do_delete).start()
+
+
 async def send_anime_result(message, anime: dict):
     """Bot search results only ever show the name — no genres, no
     description — and the action button deep-links into the mini app at
     that exact post instead of opening the raw channel link directly."""
-    await message.reply_text(anime["title"], reply_markup=InlineKeyboardMarkup([[_open_post_button(anime)]]))
+    sent = await message.reply_text(anime["title"], reply_markup=InlineKeyboardMarkup([[_open_post_button(anime)]]))
+    _delete_message_later(sent.chat_id, sent.message_id)
 
 
 async def handle_searchpick(q, sid, idx):
@@ -191,10 +233,119 @@ async def handle_searchpick(q, sid, idx):
     await q.edit_message_text(match["title"], reply_markup=InlineKeyboardMarkup([[_open_post_button(match)]]))
 
 
+# Quick reject reasons — chosen from buttons rather than a typed reply,
+# since the log post lives in a channel where correlating a free-text
+# reply back to "which pending request" is unreliable (channels don't
+# guarantee reply-threading back to a bot the way private chats do).
+# This still gets the requester a real reason instead of one generic line.
+REJECT_REASONS = {
+    "source": "Not available in our source, or a licensing issue.",
+    "dup": "This title is already posted — check the library.",
+    "quality": "No good quality release is available yet.",
+    "other": "Sorry, we're not able to add this title right now.",
+}
+
+
+async def _request_admin_guard(q) -> bool:
+    tg_user = q.from_user
+    if not tg_user or tg_user.id not in Config.ADMIN_IDS:
+        await q.answer("Admins only.", show_alert=True)
+        return False
+    return True
+
+
+async def _finalize_request_message(q, label: str):
+    try:
+        if q.message.photo:
+            await q.edit_message_caption(caption=(q.message.caption or "") + f"\n\n{label}")
+        else:
+            await q.edit_message_text((q.message.text or "") + f"\n\n{label}")
+    except Exception:
+        pass
+
+
+async def handle_request_accept(q, request_id_str: str | None):
+    """\u2705 Accept — resolves immediately, no submenu needed."""
+    if not await _request_admin_guard(q):
+        return
+    try:
+        request_id = int(request_id_str)
+    except (TypeError, ValueError):
+        await q.answer()
+        return
+    updated = await asyncio.to_thread(db.resolve_request_by_id, request_id, "accepted")
+    if updated is None:
+        await q.answer("Already handled.", show_alert=True)
+        return
+    await q.answer("Accepted \u2705")
+    await _finalize_request_message(q, f"\u2705 Accepted by {_display_name_from_user(q.from_user)}")
+
+
+async def show_reject_reasons(q, request_id_str: str | None):
+    """\u274c Reject — swaps the buttons for a quick-reason submenu instead of
+    resolving right away, so the requester gets an actual reason."""
+    if not await _request_admin_guard(q):
+        return
+    if not request_id_str:
+        await q.answer()
+        return
+    await q.answer()
+    rows = [
+        [InlineKeyboardButton("Not in our source / licensing", callback_data=f"reqreason:{request_id_str}:source")],
+        [InlineKeyboardButton("Already posted", callback_data=f"reqreason:{request_id_str}:dup")],
+        [InlineKeyboardButton("No good release yet", callback_data=f"reqreason:{request_id_str}:quality")],
+        [InlineKeyboardButton("Other", callback_data=f"reqreason:{request_id_str}:other")],
+        [InlineKeyboardButton("\u2190 Back", callback_data=f"reqback:{request_id_str}")],
+    ]
+    try:
+        await q.edit_message_reply_markup(InlineKeyboardMarkup(rows))
+    except Exception:
+        pass
+
+
+async def show_accept_reject(q, request_id_str: str | None):
+    """\u2190 Back — restores the original Accept/Reject pair."""
+    if not await _request_admin_guard(q):
+        return
+    await q.answer()
+    rows = [[
+        InlineKeyboardButton("\u2705 Accept", callback_data=f"reqaccept:{request_id_str}"),
+        InlineKeyboardButton("\u274c Reject", callback_data=f"reqreject:{request_id_str}"),
+    ]]
+    try:
+        await q.edit_message_reply_markup(InlineKeyboardMarkup(rows))
+    except Exception:
+        pass
+
+
+async def handle_request_reject(q, request_id_str: str | None, reason_code: str):
+    """A specific reason was picked from the submenu — resolve as rejected
+    with that reason as the requester's notification note."""
+    if not await _request_admin_guard(q):
+        return
+    try:
+        request_id = int(request_id_str)
+    except (TypeError, ValueError):
+        await q.answer()
+        return
+    note = REJECT_REASONS.get(reason_code, REJECT_REASONS["other"])
+    updated = await asyncio.to_thread(db.resolve_request_by_id, request_id, "rejected", note)
+    if updated is None:
+        await q.answer("Already handled.", show_alert=True)
+        return
+    await q.answer("Rejected \u274c")
+    await _finalize_request_message(q, f"\u274c Rejected by {_display_name_from_user(q.from_user)} \u2014 {note}")
+
+
 async def on_text_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Any plain-text message (not a command) is treated as an anime title
-    search against the local library."""
-    text = (update.message.text or "").strip()
+    search against the local library. Private chats only."""
+    message = update.message
+    text = (message.text or "").strip()
+    chat = update.effective_chat
+
+    if chat.type != "private":
+        return
 
     if len(text) < 2:
         return
@@ -202,24 +353,26 @@ async def on_text_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     local_matches = await asyncio.to_thread(db.search_local, text)
     if not local_matches:
         keyboard = InlineKeyboardMarkup([[_search_in_app_button(text)]])
-        await update.message.reply_text(
-            f"'{text}' isn't posted yet. Open {Config.BRAND_NAME} to search and vote for it.",
+        sent = await message.reply_text(
+            f"'{text}' isn't posted yet. Open {Config.BRAND_NAME} to search and request it.",
             reply_markup=keyboard,
         )
+        _delete_message_later(sent.chat_id, sent.message_id)
         return
 
     if len(local_matches) == 1:
-        await send_anime_result(update.message, local_matches[0])
+        await send_anime_result(message, local_matches[0])
         return
 
     sid = new_session(kind="searchpick", matches=local_matches[:8])
     rows = [[InlineKeyboardButton(m["title"], callback_data=f"searchpick:{sid}:{i}")]
             for i, m in enumerate(local_matches[:8])]
     rows.append([InlineKeyboardButton("Cancel", callback_data=f"cancel:{sid}")])
-    await update.message.reply_text(
+    sent = await message.reply_text(
         f"Found {len(local_matches)} matches for '{text}':",
         reply_markup=InlineKeyboardMarkup(rows),
     )
+    _delete_message_later(sent.chat_id, sent.message_id)
 
 
 # --- Notifications to the log channel -------------------------------------
@@ -237,14 +390,22 @@ def notify_new_report(title: str, reason: str, details: str, reporter_name: str)
     run_async(bot_app.bot.send_message(Config.LOG_CHANNEL_ID, text))
 
 
-def notify_vote_milestone(title: str, count: int):
+def notify_new_request(request_id: int, title: str, requester_name: str, poster_url: str | None):
     if not Config.LOG_CHANNEL_ID or not bot_app:
         return
     text = (
-        f"\U0001f525 {count} people are demanding \"{title}\" — "
-        f"consider adding it via the {Config.BRAND_NAME} mini app!"
+        f"\U0001f4dd New Request\n"
+        f"Anime: {title}\n"
+        f"By: {requester_name}"
     )
-    run_async(bot_app.bot.send_message(Config.LOG_CHANNEL_ID, text))
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("\u2705 Accept", callback_data=f"reqaccept:{request_id}"),
+        InlineKeyboardButton("\u274c Reject", callback_data=f"reqreject:{request_id}"),
+    ]])
+    if poster_url:
+        run_async(bot_app.bot.send_photo(Config.LOG_CHANNEL_ID, poster_url, caption=text, reply_markup=keyboard))
+    else:
+        run_async(bot_app.bot.send_message(Config.LOG_CHANNEL_ID, text, reply_markup=keyboard))
 
 
 # ---------------------------------------------------------------------------
@@ -462,23 +623,15 @@ def api_available():
     return jsonify([a for a in db.list_available() if a.get("available")])
 
 
-def _related_posted(source: str, relations: list[dict]) -> list[dict]:
-    """Cross-references a title's typed relations (Prequel/Sequel/Side
-    Story/etc., from plugins/anilist.py's get_details) against what's
-    actually posted, so the detail sheet can show a "jump to the other
-    season" card only for titles that are actually joinable — not every
-    AniList relation, most of which won't be posted."""
-    out = []
-    for rel in relations:
-        posted = db.find_by_source_id(source, rel["source_id"])
-        if posted and posted.get("join_link"):
-            out.append({
-                "id": posted["id"],
-                "title": posted["title"],
-                "poster_url": posted.get("poster_url"),
-                "relation_type": rel["type"],
-            })
-    return out
+def _related_posted(details: dict) -> list[dict]:
+    """The whole franchise (seasons, OVAs, movies, spin-offs, alternates —
+    every entry reachable by walking AniList's relation graph) collapsed
+    into a single release-chronological timeline, filtered to entries that
+    are actually posted. Returns just the immediately-previous and
+    immediately-next entry relative to `details` — never one card per
+    AniList relation edge — so the detail sheet always shows at most a
+    Prequel card and a Sequel card, no matter how large the franchise is."""
+    return db.get_franchise_neighbors(details)
 
 
 @app.get("/api/anime/<int:anime_id>")
@@ -486,7 +639,7 @@ def api_anime_detail(anime_id):
     anime = db.get_anime(anime_id)
     if not anime:
         abort(404)
-    anime["related_posted"] = _related_posted(anime["source"], anime.get("relations") or [])
+    anime["related_posted"] = _related_posted(anime)
     return jsonify(anime)
 
 
@@ -498,25 +651,67 @@ def api_anilist_details(anilist_id):
         details = SOURCES["anilist"].get_details(anilist_id)
     except requests.RequestException:
         abort(502)
-    details["related_posted"] = _related_posted(details["source"], details.get("relations") or [])
+    details["related_posted"] = _related_posted(details)
     return jsonify(details)
 
 
-@app.post("/api/vote")
-def api_vote():
+@app.post("/api/request")
+def api_request_anime():
     payload = request.get_json(force=True, silent=True) or {}
     title = (payload.get("title") or "").strip()
     if not title:
         return jsonify(error="title is required"), 400
+    source = payload.get("source")
+    source_id = payload.get("source_id")
+    poster_url = payload.get("poster_url")
+    genres = payload.get("genres")
 
     user = current_user()
     if not user:
-        return jsonify(error="Open this inside Telegram to vote."), 401
+        return jsonify(error="Open this inside Telegram to request an anime."), 401
 
-    result = db.record_vote(title, user["id"])
-    if not result["already_voted"] and result["count"] % 20 == 0:
-        notify_vote_milestone(title, result["count"])
+    result = db.create_request(title, source, source_id, poster_url, genres, user["id"], _telegram_user_label(user))
+    if not result["already_requested"]:
+        notify_new_request(result["id"], title, _telegram_user_label(user), poster_url)
     return jsonify(result)
+
+
+@app.get("/api/notifications")
+def api_notifications():
+    user = current_user()
+    if not user:
+        return jsonify(unseen_count=0, notifications=[])
+    return jsonify(db.get_user_notifications(user["id"]))
+
+
+@app.post("/api/notifications/seen")
+def api_notifications_seen():
+    user = current_user()
+    if not user:
+        return jsonify(error="Open this inside Telegram."), 401
+    db.mark_notifications_seen(user["id"])
+    return jsonify(status="ok")
+
+
+@app.get("/api/admin/requests")
+def api_admin_requests():
+    user = current_user()
+    if not is_admin(user):
+        abort(403)
+    return jsonify(db.list_pending_requests())
+
+
+@app.patch("/api/admin/requests/<path:key>")
+def api_admin_respond_request(key):
+    user = current_user()
+    if not is_admin(user):
+        abort(403)
+    payload = request.get_json(force=True, silent=True) or {}
+    status = payload.get("status")
+    if status not in ("accepted", "rejected"):
+        return jsonify(error="status must be 'accepted' or 'rejected'"), 400
+    updated = db.respond_to_request(key, status)
+    return jsonify(status="ok", updated=updated)
 
 
 @app.post("/api/report")
@@ -616,8 +811,22 @@ def api_edit_link(anime_id):
     except ValueError as e:
         return jsonify(error=str(e)), 400
     if link:
+        # Setting a link is also the natural moment to refresh this post's
+        # cached AniList metadata (poster, genres, episode count, and
+        # critically its relations list) — not just the join_link field.
+        # Without this, a post created before the relations field existed
+        # (or one whose franchise has grown since it was posted) would be
+        # permanently stuck with stale/missing data and never show
+        # Prequel/Sequel cards, since nothing else ever re-fetches it.
+        anime = db.get_anime(anime_id)
+        try:
+            details = SOURCES[anime["source"]].get_details(anime["source_id"])
+            db.upsert_anime(details)
+        except requests.RequestException:
+            pass  # AniList unreachable — keep whatever's cached, still set the link below
         db.update_link(anime_id, link)
         propagated = propagate_link_full_franchise(anime_id, link)
+        db.accept_requests_for_title(anime["title"])
         return jsonify(status="updated", link=link, propagated=propagated)
     # No link = not a real post anymore — delete it (and the rest of its
     # franchise, which just lost the link via propagation) from MongoDB
@@ -650,6 +859,7 @@ def api_set_link_from_anilist(anilist_id):
     anime_id = db.upsert_anime(details, added_by=user["id"])
     db.update_link(anime_id, link)
     propagated = propagate_link_full_franchise(anime_id, link)
+    db.accept_requests_for_title(details["title"])
     return jsonify(status="updated", anime=db.get_anime(anime_id), propagated=propagated)
 
 
