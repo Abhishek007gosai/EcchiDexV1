@@ -239,9 +239,9 @@ async def handle_searchpick(q, sid, idx):
 # guarantee reply-threading back to a bot the way private chats do).
 # This still gets the requester a real reason instead of one generic line.
 REJECT_REASONS = {
-    "source": "Not available in our source, or a licensing issue.",
     "dup": "This title is already posted — check the library.",
-    "quality": "No good quality release is available yet.",
+    "unavailable": "This title isn't available right now.",
+    "unreleased": "This title hasn't been released yet.",
     "other": "Sorry, we're not able to add this title right now.",
 }
 
@@ -291,9 +291,9 @@ async def show_reject_reasons(q, request_id_str: str | None):
         return
     await q.answer()
     rows = [
-        [InlineKeyboardButton("Not in our source / licensing", callback_data=f"reqreason:{request_id_str}:source")],
         [InlineKeyboardButton("Already posted", callback_data=f"reqreason:{request_id_str}:dup")],
-        [InlineKeyboardButton("No good release yet", callback_data=f"reqreason:{request_id_str}:quality")],
+        [InlineKeyboardButton("Not available", callback_data=f"reqreason:{request_id_str}:unavailable")],
+        [InlineKeyboardButton("Not release yet", callback_data=f"reqreason:{request_id_str}:unreleased")],
         [InlineKeyboardButton("Other", callback_data=f"reqreason:{request_id_str}:other")],
         [InlineKeyboardButton("\u2190 Back", callback_data=f"reqback:{request_id_str}")],
     ]
@@ -391,6 +391,8 @@ def notify_new_report(title: str, reason: str, details: str, reporter_name: str)
 
 
 def notify_new_request(request_id: int, title: str, requester_name: str, poster_url: str | None):
+    # Text-only log post — no anime poster attached, even when one is
+    # available, so the Logs feed stays a plain scrollable text list.
     if not Config.LOG_CHANNEL_ID or not bot_app:
         return
     text = (
@@ -402,10 +404,7 @@ def notify_new_request(request_id: int, title: str, requester_name: str, poster_
         InlineKeyboardButton("\u2705 Accept", callback_data=f"reqaccept:{request_id}"),
         InlineKeyboardButton("\u274c Reject", callback_data=f"reqreject:{request_id}"),
     ]])
-    if poster_url:
-        run_async(bot_app.bot.send_photo(Config.LOG_CHANNEL_ID, poster_url, caption=text, reply_markup=keyboard))
-    else:
-        run_async(bot_app.bot.send_message(Config.LOG_CHANNEL_ID, text, reply_markup=keyboard))
+    run_async(bot_app.bot.send_message(Config.LOG_CHANNEL_ID, text, reply_markup=keyboard))
 
 
 # ---------------------------------------------------------------------------
