@@ -1,16 +1,16 @@
 :root {
-  --bg: #f4f1e6;
-  --surface: #ffffff;
-  --surface-2: #ece6d4;
-  --border: #ddd5bd;
-  --text: #1b1b16;
-  --text-dim: #5c5847;
-  --text-faint: #8a8570;
+  --bg: #131310;
+  --surface: #1c1c17;
+  --surface-2: #28281f;
+  --border: #3a392c;
+  --text: #f2efe2;
+  --text-dim: #b6b19c;
+  --text-faint: #7f7a65;
   --grad: linear-gradient(90deg, var(--green-dark), var(--green));
   --amber: #e8a317;
-  --green: #2f6d34;
-  --green-dark: #16311a;
-  --hot: #d63f6d;
+  --green: #4b9a51;
+  --green-dark: #1d4f24;
+  --hot: #e2597e;
 }
 
 * { box-sizing: border-box; }
@@ -48,7 +48,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 14px;
+  padding-bottom: 20px;
 }
 
 .identity-left {
@@ -86,6 +86,162 @@ html, body {
   justify-content: center;
   font-size: 15px;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  flex: none;
+}
+
+.identity-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notif-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--hot);
+  border: 1.5px solid var(--bg, #f4f1e6);
+}
+
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 60dvh;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+
+/* The notifications sheet: keep the title and Close button fixed in place
+   and let only the list itself scroll, instead of the whole card growing
+   past the screen when there are many notifications.
+   Root cause of the overflow was `vh` vs `dvh`: on mobile, plain `vh`
+   measures against the largest possible viewport (before the browser/
+   Telegram chrome collapses), so 86vh could be taller than what's
+   actually on screen — pushing Close off the bottom. The rest of the app
+   already uses `dvh` for this reason (see #app-view); the sheet needed
+   the same fix. */
+#notif-overlay .sheet {
+  max-height: min(640px, 86dvh);
+  overflow: hidden;
+}
+#notif-overlay .sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+#notif-overlay .notif-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.notif-card {
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.notif-card.accepted { border-color: var(--green); background: var(--surface-2); background: color-mix(in srgb, var(--green) 8%, var(--surface-2)); }
+.notif-card.rejected { border-color: var(--hot); background: var(--surface-2); background: color-mix(in srgb, var(--hot) 8%, var(--surface-2)); }
+.notif-card.unseen { box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.04) inset; }
+
+.notif-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.notif-card-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+.notif-card.accepted .notif-card-icon { background: var(--green); }
+.notif-card.rejected .notif-card-icon { background: var(--hot); }
+
+.notif-card-headline {
+  flex: 1;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+.notif-card.accepted .notif-card-headline { color: var(--green); }
+.notif-card.rejected .notif-card-headline { color: var(--hot); }
+
+.notif-card-time {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.notif-card-body {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.notif-thumb {
+  flex: none;
+  width: 52px;
+  height: 70px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.notif-thumb img,
+.notif-thumb .generated-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.notif-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.notif-card-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.notif-card-genres {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.notif-card-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.35;
+  margin-top: 2px;
 }
 
 /* ---------------- search ---------------- */
@@ -97,7 +253,6 @@ html, body {
   align-items: center;
 }
 
-#search-row-home { margin: 0 0 16px; }
 
 .search-icon-left {
   position: absolute;
@@ -287,12 +442,6 @@ html, body {
   text-overflow: ellipsis;
 }
 
-.poster-episodes {
-  color: var(--text-faint);
-  font-size: 10px;
-  margin: 0;
-}
-
 .empty-note {
   color: var(--text-faint);
   font-size: 13px;
@@ -446,7 +595,7 @@ html, body {
   width: min(380px, calc(100% - 24px));
   padding: 8px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.94);
+  background: rgba(19, 19, 16, 0.92);
   border: 1px solid var(--border);
   box-shadow: 0 10px 30px rgba(27,27,22,0.12);
   backdrop-filter: blur(10px);
@@ -588,6 +737,11 @@ html, body {
   flex: none;
 }
 
+.profile-avatar-img {
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
 .profile-name { font-size: 16px; font-weight: 700; }
 .profile-username { font-size: 13px; color: var(--text-faint); }
 
@@ -619,7 +773,7 @@ html, body {
 .sheet {
   width: 100%;
   max-width: 360px;
-  max-height: min(640px, 86vh);
+  max-height: min(640px, 86dvh);
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -781,7 +935,7 @@ html, body {
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
-  margin: -8px 0 10px;
+  margin: 2px 0 10px;
   padding: 0;
 }
 
@@ -831,7 +985,7 @@ html, body {
 
 .sheet-description.clamped {
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
