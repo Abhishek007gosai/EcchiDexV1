@@ -21,7 +21,13 @@
             <span class="brand-handle">{{ brand_handle }}</span>
           </div>
         </div>
-        <button class="icon-btn" id="profile-btn" aria-label="Profile">&#128100;</button>
+        <div class="identity-right">
+          <button class="icon-btn" id="notif-btn" aria-label="Notifications">
+            &#128276;
+            <span id="notif-badge" class="notif-badge hidden"></span>
+          </button>
+          <button class="icon-btn" id="profile-btn" aria-label="Profile">&#128100;</button>
+        </div>
       </div>
 
       <div class="search-row" id="search-row-home">
@@ -184,6 +190,20 @@
         <div class="btn-row">
           <button id="link-cancel" class="btn btn-secondary">Cancel</button>
           <button id="link-save" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== Notifications sheet ===================== -->
+  <div id="notif-overlay" class="overlay hidden">
+    <div class="sheet">
+      <div class="sheet-body">
+        <h3 class="sheet-title">Notifications</h3>
+        <div id="notif-list" class="notif-list"></div>
+        <p id="notif-empty" class="empty-note hidden">No notifications yet.</p>
+        <div class="btn-row">
+          <button id="notif-close" class="btn btn-secondary">Close</button>
         </div>
       </div>
     </div>
