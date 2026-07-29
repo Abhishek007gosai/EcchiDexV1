@@ -133,27 +133,35 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 60vh;
+  max-height: 60dvh;
   overflow-y: auto;
   margin-bottom: 4px;
 }
 
 /* The notifications sheet: keep the title and Close button fixed in place
    and let only the list itself scroll, instead of the whole card growing
-   past the screen when there are many notifications. */
+   past the screen when there are many notifications.
+   Root cause of the overflow was `vh` vs `dvh`: on mobile, plain `vh`
+   measures against the largest possible viewport (before the browser/
+   Telegram chrome collapses), so 86vh could be taller than what's
+   actually on screen — pushing Close off the bottom. The rest of the app
+   already uses `dvh` for this reason (see #app-view); the sheet needed
+   the same fix. */
 #notif-overlay .sheet {
+  max-height: min(640px, 86dvh);
   overflow: hidden;
 }
 #notif-overlay .sheet-body {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
 #notif-overlay .notif-list {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   max-height: none;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .notif-card {
@@ -824,7 +832,7 @@ html, body {
 .sheet {
   width: 100%;
   max-width: 360px;
-  max-height: min(640px, 86vh);
+  max-height: min(640px, 86dvh);
   display: flex;
   flex-direction: column;
   background: var(--surface);
