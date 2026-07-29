@@ -34,6 +34,7 @@ def init_db():
     anime_col.create_index([("title", ASCENDING)])
     requests_col.create_index([("key", ASCENDING), ("requested_by", ASCENDING)])
     requests_col.create_index([("status", ASCENDING)])
+    requests_col.create_index([("status", ASCENDING), ("created_at", ASCENDING)])
     requests_col.create_index([("requested_by", ASCENDING), ("seen", ASCENDING)])
     requests_col.create_index([("requested_by", ASCENDING), ("responded_at", ASCENDING)])
     searches_col.create_index([("count", ASCENDING)])
@@ -390,19 +391,48 @@ def _request_ref(doc: dict) -> str:
 DEFAULT_ACCEPT_NOTE = "Good news! Your requested anime has been accepted and will be added soon."
 DEFAULT_REJECT_NOTE = "Sorry, we're not able to add this title right now."
 
+REQUEST_PENDING_TTL_SECONDS = 24 * 60 * 60  # an unanswered request auto-deletes after 24h
+
+
+def _expire_stale_pending_requests() -> None:
+    """A request an admin never accepts or rejects would otherwise sit as
+    'pending' forever. This process has no always-on background worker to
+    run a real scheduled job on — it only runs its event loop while
+    actually handling a request (see _delete_message_later's docstring in
+    app.py for the same constraint) — so instead this sweep just runs
+    opportunistically every time pending requests are created or read,
+    which in practice happens often enough that nothing sits expired for
+    long."""
+    cutoff = time.time() - REQUEST_PENDING_TTL_SECONDS
+    requests_col.delete_many({"status": "pending", "created_at": {"$lt": cutoff}})
+
+
+MAX_PENDING_REQUESTS_PER_USER = 5
+
 
 def create_request(title: str, source: str | None, source_id, poster_url: str | None,
                     genres: list[str] | None, telegram_id: int, telegram_name: str | None) -> dict:
-    """Returns {"status": str, "already_requested": bool, "id": int}. Each
-    Telegram user gets at most one active request per title — asking again
-    while it's still pending (or already accepted) just returns the
+    """Returns {"status": str, "already_requested": bool, "id": int | None}.
+    Each Telegram user gets at most one active request per title — asking
+    again while it's still pending (or already accepted) just returns the
     current status. A title that was previously rejected can be requested
-    again, which reopens it as a fresh pending request."""
+    again, which reopens it as a fresh pending request — but only up to
+    MAX_PENDING_REQUESTS_PER_USER pending requests at once per user; past
+    that, status is "limit_reached" and nothing is written, so someone
+    can't flood the admin queue with an unbounded backlog."""
+    _expire_stale_pending_requests()
     key = _request_key(title)
     existing = requests_col.find_one({"key": key, "requested_by": telegram_id})
 
     if existing and existing["status"] != "rejected":
         return {"status": existing["status"], "already_requested": True, "id": existing["_id"]}
+
+    pending_count = requests_col.count_documents({"requested_by": telegram_id, "status": "pending"})
+    if pending_count >= MAX_PENDING_REQUESTS_PER_USER:
+        return {
+            "status": "limit_reached", "already_requested": False, "id": None,
+            "limit": MAX_PENDING_REQUESTS_PER_USER,
+        }
 
     now = time.time()
     if existing:
@@ -442,6 +472,7 @@ def list_pending_requests() -> list[dict]:
     """One row per distinct requested title (not per requester), for the
     admin queue — grouped so an admin sees "12 people want Title X" instead
     of 12 separate identical-looking rows."""
+    _expire_stale_pending_requests()
     pipeline = [
         {"$match": {"status": "pending"}},
         {"$sort": {"created_at": 1}},
@@ -513,6 +544,7 @@ def get_user_notifications(telegram_id: int, limit: int = 30) -> dict:
     even if it was never opened. A user who has never requested anything
     (or whose requests are all still pending, or all expired) gets an empty
     list and a zero count, i.e. an empty bell."""
+    _expire_stale_pending_requests()
     cutoff = time.time() - NOTIFICATION_TTL_SECONDS
     fresh_filter = {
         "requested_by": telegram_id,
