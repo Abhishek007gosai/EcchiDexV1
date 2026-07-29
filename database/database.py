@@ -35,6 +35,7 @@ def init_db():
     requests_col.create_index([("key", ASCENDING), ("requested_by", ASCENDING)])
     requests_col.create_index([("status", ASCENDING)])
     requests_col.create_index([("requested_by", ASCENDING), ("seen", ASCENDING)])
+    requests_col.create_index([("requested_by", ASCENDING), ("responded_at", ASCENDING)])
     searches_col.create_index([("count", ASCENDING)])
     recent_searches_col.create_index([("user_id", ASCENDING), ("searched_at", ASCENDING)])
 
