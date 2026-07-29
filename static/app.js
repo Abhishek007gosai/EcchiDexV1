@@ -146,6 +146,13 @@
   const linkOverlay = el("link-overlay");
   const linkInput = el("link-input");
 
+  const notifBtn = el("notif-btn");
+  const notifBadge = el("notif-badge");
+  const notifOverlay = el("notif-overlay");
+  const notifList = el("notif-list");
+  const notifEmpty = el("notif-empty");
+  const notifClose = el("notif-close");
+
   const reportOverlay = el("report-overlay");
   const reportDetails = el("report-details");
   let selectedReason = null;
@@ -726,23 +733,30 @@
         });
         row.appendChild(joinBtn);
       } else {
-        const voteBtn = document.createElement("button");
-        voteBtn.className = "btn btn-primary";
-        voteBtn.textContent = "Vote";
-        voteBtn.addEventListener("click", async () => {
-          voteBtn.disabled = true;
+        const requestBtn = document.createElement("button");
+        requestBtn.className = "btn btn-primary";
+        requestBtn.textContent = "Request";
+        requestBtn.addEventListener("click", async () => {
+          requestBtn.disabled = true;
           try {
-            const result = await api("/api/vote", { method: "POST", body: JSON.stringify({ title: anime.title }) });
-            voteBtn.textContent = result.already_voted
-              ? `\u2713 Already voted (${result.count})`
-              : `\u2713 Voted (${result.count})`;
-            showToast(result.already_voted ? "You already voted for this." : "Vote counted!");
+            const result = await api("/api/request", {
+              method: "POST",
+              body: JSON.stringify({
+                title: anime.title,
+                source: anime.source || "anilist",
+                source_id: anime.source_id ?? anime.anilist_id,
+                poster_url: anime.poster_url,
+                genres: anime.genres || [],
+              }),
+            });
+            requestBtn.textContent = "\u2713 Requested";
+            showToast(result.already_requested ? "You already requested this." : "Request sent!");
           } catch (err) {
-            voteBtn.disabled = false;
-            showToast(err.message || "Couldn't send vote right now.");
+            requestBtn.disabled = false;
+            showToast(err.message || "Couldn't send request right now.");
           }
         });
-        row.appendChild(voteBtn);
+        row.appendChild(requestBtn);
       }
 
       if (profile && profile.role === "admin" && anime.anilist_id) {
@@ -1269,6 +1283,133 @@
   }
 
   // ---------------------------------------------------------------------
+  // Notifications (request accepted/rejected) — the bell in the header
+  // ---------------------------------------------------------------------
+  let notifications = [];
+
+  function renderNotifBadge(count) {
+    notifBadge.classList.toggle("hidden", !count);
+  }
+
+  function timeAgo(ts) {
+    if (!ts) return "";
+    const diff = Math.max(0, Date.now() / 1000 - ts);
+    if (diff < 60) return "just now";
+    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+    return Math.floor(diff / 86400) + "d ago";
+  }
+
+  function renderNotifications() {
+    notifList.innerHTML = "";
+    notifEmpty.classList.toggle("hidden", notifications.length > 0);
+    notifications.forEach((n) => {
+      const accepted = n.status === "accepted";
+      const card = document.createElement("div");
+      card.className = "notif-card " + n.status + (n.seen ? "" : " unseen");
+
+      const header = document.createElement("div");
+      header.className = "notif-card-header";
+      const icon = document.createElement("span");
+      icon.className = "notif-card-icon";
+      icon.textContent = accepted ? "\u2713" : "\u2717";
+      const headline = document.createElement("span");
+      headline.className = "notif-card-headline";
+      headline.textContent = "ANIME REQUEST " + (accepted ? "ACCEPTED" : "REJECTED");
+      const time = document.createElement("span");
+      time.className = "notif-card-time";
+      time.textContent = timeAgo(n.responded_at);
+      header.appendChild(icon);
+      header.appendChild(headline);
+      header.appendChild(time);
+      card.appendChild(header);
+
+      const body = document.createElement("div");
+      body.className = "notif-card-body";
+      const thumb = document.createElement("div");
+      thumb.className = "notif-thumb";
+      thumbImg(thumb, n.poster_url, n.title);
+      body.appendChild(thumb);
+
+      const info = document.createElement("div");
+      info.className = "notif-card-info";
+      const title = document.createElement("div");
+      title.className = "notif-card-title";
+      title.textContent = n.title;
+      info.appendChild(title);
+      if (n.genres && n.genres.length) {
+        const genres = document.createElement("div");
+        genres.className = "notif-card-genres";
+        genres.textContent = n.genres.join(" \u2022 ");
+        info.appendChild(genres);
+      }
+      const note = document.createElement("div");
+      note.className = "notif-card-note";
+      note.textContent = n.note;
+      info.appendChild(note);
+      body.appendChild(info);
+      card.appendChild(body);
+
+      const footer = document.createElement("div");
+      footer.className = "notif-card-footer";
+      const meta = document.createElement("div");
+      meta.className = "notif-card-meta";
+      meta.innerHTML = `Requested by <span class="notif-card-user">${escapeHtml(n.requested_by_name || "you")}</span><br>Request ID: #${escapeHtml(n.ref)}`;
+      footer.appendChild(meta);
+
+      const actionBtn = document.createElement("button");
+      actionBtn.className = "notif-card-action " + n.status;
+      actionBtn.textContent = accepted ? "Thank you!" : "Need Help?";
+      actionBtn.addEventListener("click", () => {
+        if (accepted) {
+          actionBtn.disabled = true;
+          actionBtn.textContent = "\u2713 Thanked";
+          showToast("\ud83d\ude4f");
+        } else {
+          currentDetail = { id: null, title: n.title };
+          selectedReason = null;
+          reportDetails.value = "";
+          document.querySelectorAll(".reason-btn").forEach((b) => b.classList.remove("selected"));
+          notifOverlay.classList.add("hidden");
+          reportOverlay.classList.remove("hidden");
+        }
+      });
+      footer.appendChild(actionBtn);
+      card.appendChild(footer);
+
+      notifList.appendChild(card);
+    });
+  }
+
+  async function loadNotifications() {
+    try {
+      const data = await api("/api/notifications");
+      notifications = data.notifications || [];
+      renderNotifBadge(data.unseen_count || 0);
+    } catch (err) {
+      notifications = [];
+      renderNotifBadge(0);
+    }
+  }
+
+  notifBtn.addEventListener("click", async () => {
+    renderNotifications();
+    notifOverlay.classList.remove("hidden");
+    if (notifications.some((n) => !n.seen)) {
+      try {
+        await api("/api/notifications/seen", { method: "POST" });
+      } catch (err) { /* badge will just recheck next load */ }
+      notifications.forEach((n) => { n.seen = true; });
+      renderNotifBadge(0);
+      renderNotifications();
+    }
+  });
+  notifClose.addEventListener("click", () => notifOverlay.classList.add("hidden"));
+  notifOverlay.addEventListener("click", (e) => {
+    if (e.target === notifOverlay) notifOverlay.classList.add("hidden");
+  });
+
+  // ---------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------
   async function loadDiscover() {
@@ -1341,7 +1482,11 @@
 
   (async function init() {
     document.title = brandName;
-    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile()]);
+    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile(), loadNotifications()]);
     applyDeepLink();
   })();
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") loadNotifications();
+  });
 })();
