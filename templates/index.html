@@ -3,10 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#f4f1e6" />
+  <meta name="theme-color" content="#131310" id="theme-color-meta" />
   <title>{{ brand_name }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    // Applied before first paint so the page never flashes the wrong theme.
+    // Dark is the default when nothing has been chosen yet.
+    (function () {
+      try {
+        var saved = localStorage.getItem("touka-theme");
+        if (saved === "light") document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) { /* localStorage unavailable — dark default stays */ }
+    })();
+  </script>
 </head>
 <body data-brand="{{ brand_name }}">
 
@@ -131,6 +141,15 @@
     <div class="profile-card" id="profile-card">
       <p class="profile-hint">Loading profile…</p>
     </div>
+    <div class="profile-card theme-card">
+      <div class="profile-row" style="border-bottom: none;">
+        <span class="label">Theme</span>
+      </div>
+      <div class="pill-tabs theme-toggle" id="theme-toggle" style="margin-bottom: 0;">
+        <button class="pill-tab" data-theme-choice="dark">Dark</button>
+        <button class="pill-tab" data-theme-choice="light">Light</button>
+      </div>
+    </div>
   </section>
 
   <!-- ===================== Persistent bottom nav (shown across all views) ===================== -->
@@ -216,9 +235,6 @@
         <h3 class="sheet-title">Report an issue</h3>
         <div id="report-reasons" class="reason-list">
           <button class="reason-btn" data-reason="Link isn't working">Link isn't working</button>
-          <button class="reason-btn" data-reason="Wrong anime uploaded">Wrong anime uploaded</button>
-          <button class="reason-btn" data-reason="Episodes are missing">Episodes are missing</button>
-          <button class="reason-btn" data-reason="Poor video quality">Poor video quality</button>
           <button class="reason-btn" data-reason="Wrong channel linked">Wrong channel linked</button>
           <button class="reason-btn" data-reason="Other">Other</button>
         </div>
