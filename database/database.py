@@ -27,11 +27,14 @@ requests_col = _db["requests"]
 searches_col = _db["searches"]
 recent_searches_col = _db["recent_searches"]
 counters_col = _db["counters"]
+cache_col = _db["api_cache"]
 
 
 def init_db():
     anime_col.create_index([("source", ASCENDING), ("source_id", ASCENDING)], unique=True)
     anime_col.create_index([("title", ASCENDING)])
+    # API response cache — survives restarts so AniList cold-start is avoided
+    cache_col.create_index([("cached_at", ASCENDING)], expireAfterSeconds=3600)
     requests_col.create_index([("key", ASCENDING), ("requested_by", ASCENDING)])
     requests_col.create_index([("status", ASCENDING)])
     requests_col.create_index([("status", ASCENDING), ("created_at", ASCENDING)])
@@ -49,6 +52,25 @@ def _next_id(counter_name: str) -> int:
         return_document=True,
     )
     return doc["seq"]
+
+
+# ---------------------------------------------------------------------------
+# API response cache (MongoDB-backed, survives restarts)
+# ---------------------------------------------------------------------------
+
+def get_cache(key: str, ttl: int = 600) -> dict | None:
+    doc = cache_col.find_one({"_id": key})
+    if doc and time.time() - doc.get("cached_at", 0) < ttl:
+        return doc["value"]
+    return None
+
+
+def set_cache(key: str, value: dict) -> None:
+    cache_col.replace_one(
+        {"_id": key},
+        {"_id": key, "value": value, "cached_at": time.time()},
+        upsert=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -641,3 +663,10 @@ def get_recent_searches(user_id: int, limit: int = 10) -> list[dict]:
 def clear_recent_searches(user_id: int) -> None:
     recent_searches_col.delete_many({"user_id": user_id})
 
+
+
+# ---------------------------------------------------------------------------
+# Compatibility export — allows legacy `from database import database as db`
+# ---------------------------------------------------------------------------
+import sys as _sys
+database = _sys.modules[__name__]
