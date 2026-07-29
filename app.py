@@ -28,6 +28,7 @@ from urllib.parse import parse_qsl, quote
 
 import requests
 from flask import Flask, abort, jsonify, render_template, request
+from flask_compress import Compress
 
 from config import Config
 from database import database as db
@@ -48,6 +49,15 @@ app.config["SECRET_KEY"] = Config.SECRET_KEY
 # 1 hour static cache — trims repeat-visit load time on Render/Koyeb without
 # risking a stale asset for too long after a redeploy.
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600
+# gzip every JSON/HTML/JS/CSS response. The catalog endpoints return sizeable
+# JSON (poster URLs, synopses, genre lists for 10-15 titles at a time) and
+# users are frequently on slow mobile connections, so this is a real win on
+# both time-to-first-render and data usage, not just a nicety.
+app.config["COMPRESS_MIMETYPES"] = [
+    "text/html", "text/css", "text/javascript", "application/javascript",
+    "application/json",
+]
+Compress(app)
 
 db.init_db()
 
@@ -521,27 +531,33 @@ def healthz():
 def api_trending():
     page = request.args.get("page", 1, type=int)
     try:
-        return jsonify(SOURCES["anilist"].get_trending(page))
+        resp = jsonify(SOURCES["anilist"].get_trending(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
+    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
+    return resp
 
 
 @app.get("/api/catalog/popular")
 def api_popular():
     page = request.args.get("page", 1, type=int)
     try:
-        return jsonify(SOURCES["anilist"].get_popular(page))
+        resp = jsonify(SOURCES["anilist"].get_popular(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
+    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
+    return resp
 
 
 @app.get("/api/catalog/most-popular")
 def api_most_popular():
     page = request.args.get("page", 1, type=int)
     try:
-        return jsonify(SOURCES["anilist"].get_most_popular(page))
+        resp = jsonify(SOURCES["anilist"].get_most_popular(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
+    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
+    return resp
 
 
 @app.post("/api/search/track")
@@ -819,7 +835,7 @@ def api_edit_link(anime_id):
         # Prequel/Sequel cards, since nothing else ever re-fetches it.
         anime = db.get_anime(anime_id)
         try:
-            details = SOURCES[anime["source"]].get_details(anime["source_id"])
+            details = SOURCES[anime["source"]].get_details(anime["source_id"], use_cache=False)
             db.upsert_anime(details)
         except requests.RequestException:
             pass  # AniList unreachable — keep whatever's cached, still set the link below
