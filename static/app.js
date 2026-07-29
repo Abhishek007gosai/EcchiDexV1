@@ -15,35 +15,11 @@
   }
   const initData = tg ? tg.initData : "";
 
-  // ---------------------------------------------------------------------
-  // Theme (dark default, light optional) — persisted in localStorage.
-  // The <head> inline script already applied the saved choice before
-  // paint; this just keeps everything (Telegram chrome, meta tag, the
-  // toggle UI) in sync with it and handles switching.
-  // ---------------------------------------------------------------------
-  const THEME_COLORS = { dark: "#131310", light: "#f4f1e6" };
-
-  function currentTheme() {
-    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-  }
-
-  function applyTheme(theme) {
-    if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
-    else document.documentElement.removeAttribute("data-theme");
-
-    try { localStorage.setItem("touka-theme", theme); } catch (e) { /* not fatal */ }
-
-    const color = THEME_COLORS[theme];
-    const meta = document.getElementById("theme-color-meta");
-    if (meta) meta.setAttribute("content", color);
-    if (tg) {
-      try {
-        tg.setHeaderColor && tg.setHeaderColor(color);
-        tg.setBackgroundColor && tg.setBackgroundColor(color);
-      } catch (e) { /* not fatal */ }
-    }
-
-    themeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.themeChoice === theme));
+  if (tg) {
+    try {
+      tg.setHeaderColor && tg.setHeaderColor("#131310");
+      tg.setBackgroundColor && tg.setBackgroundColor("#131310");
+    } catch (e) { /* not fatal */ }
   }
 
   function authHeaders() {
@@ -128,7 +104,6 @@
   const profileView = el("profile-view");
   const allViews = { app: appView, search: searchView, genre: genreView, profile: profileView };
 
-  const homeSearchInput = el("search-input");
   const searchViewInput = el("search-view-input");
   const searchResults = el("search-results");
   const searchResultsGroups = el("search-results-groups");
@@ -143,7 +118,7 @@
   const genreBrowseGrid = el("genre-browse-grid");
   const genreViewTitle = el("genre-view-title");
 
-  const pillTabs = document.querySelectorAll(".pill-tab");
+  const pillTabs = document.querySelectorAll(".pill-tab[data-tab]");
   const tabAll = el("tab-all");
   const tabLibrary = el("tab-library");
 
@@ -175,7 +150,7 @@
   const linkOverlay = el("link-overlay");
   const linkInput = el("link-input");
 
-  const profileBtn = el("profile-btn");
+  const headerSearchBtn = el("header-search-btn");
   const notifBtn = el("notif-btn");
   const notifBadge = el("notif-badge");
   const notifOverlay = el("notif-overlay");
@@ -188,12 +163,6 @@
   let selectedReason = null;
 
   const profileCard = el("profile-card");
-  const themeToggle = el("theme-toggle");
-  const themeButtons = themeToggle ? themeToggle.querySelectorAll(".pill-tab") : [];
-  themeButtons.forEach((btn) => {
-    btn.addEventListener("click", () => applyTheme(btn.dataset.themeChoice));
-  });
-  applyTheme(currentTheme());
 
   const toast = el("toast");
   let toastTimer = null;
@@ -275,25 +244,13 @@
     else if (target === "profile") { showView("profile"); openProfile(); }
   }));
 
-  if (profileBtn) {
-    profileBtn.addEventListener("click", () => { showView("profile"); openProfile(); });
+  if (headerSearchBtn) {
+    headerSearchBtn.addEventListener("click", () => {
+      showView("search");
+      renderSearchLanding();
+      setTimeout(() => searchViewInput.focus(), 50);
+    });
   }
-
-  // Header avatar — shows the user's real Telegram profile photo when the
-  // client exposes one, falling back to the generic person icon otherwise.
-  function renderHeaderAvatar() {
-    if (!profileBtn) return;
-    const photoUrl = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
-    if (!photoUrl) return;
-    const img = document.createElement("img");
-    img.src = photoUrl;
-    img.alt = "Profile";
-    img.className = "header-avatar-img";
-    img.onerror = () => { profileBtn.innerHTML = "&#128100;"; };
-    profileBtn.innerHTML = "";
-    profileBtn.appendChild(img);
-  }
-  renderHeaderAvatar();
 
   document.querySelectorAll("[data-back]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -301,13 +258,6 @@
       if (target === "home") showView("app");
       else if (target === "search") showView("search");
     });
-  });
-
-  // Home's own search field is a shortcut into the dedicated Search page.
-  homeSearchInput.addEventListener("click", () => {
-    showView("search");
-    renderSearchLanding();
-    setTimeout(() => searchViewInput.focus(), 50);
   });
 
   // ---------------------------------------------------------------------
@@ -388,12 +338,6 @@
       genres.className = "poster-genres";
       genres.textContent = item.genres.join(", ");
       meta.appendChild(genres);
-    }
-    if (item.episodes) {
-      const eps = document.createElement("p");
-      eps.className = "poster-episodes";
-      eps.textContent = `${item.episodes} Episodes`;
-      meta.appendChild(eps);
     }
     card.appendChild(meta);
 
@@ -1321,9 +1265,13 @@
     try {
       profile = await api("/api/profile");
       const displayName = profile.first_name || profile.username || "User";
+      const photoUrl = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
+      const avatarHtml = photoUrl
+        ? `<img class="profile-avatar profile-avatar-img" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(displayName)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className: 'profile-avatar', textContent: '${initials(displayName)}'}))" />`
+        : `<div class="profile-avatar">${initials(displayName)}</div>`;
       profileCard.innerHTML = `
         <div class="profile-header">
-          <div class="profile-avatar">${initials(displayName)}</div>
+          ${avatarHtml}
           <div>
             <div class="profile-name">${escapeHtml(displayName)}</div>
             <div class="profile-username">${profile.username ? "@" + escapeHtml(profile.username) : "no username"}</div>
@@ -1406,33 +1354,6 @@
       info.appendChild(note);
       body.appendChild(info);
       card.appendChild(body);
-
-      const footer = document.createElement("div");
-      footer.className = "notif-card-footer";
-      const meta = document.createElement("div");
-      meta.className = "notif-card-meta";
-      meta.innerHTML = `Requested by <span class="notif-card-user">${escapeHtml(n.requested_by_name || "you")}</span><br>Request ID: #${escapeHtml(n.ref)}`;
-      footer.appendChild(meta);
-
-      const actionBtn = document.createElement("button");
-      actionBtn.className = "notif-card-action " + n.status;
-      actionBtn.textContent = accepted ? "Thank you!" : "Need Help?";
-      actionBtn.addEventListener("click", () => {
-        if (accepted) {
-          actionBtn.disabled = true;
-          actionBtn.textContent = "\u2713 Thanked";
-          showToast("\ud83d\ude4f");
-        } else {
-          currentDetail = { id: null, title: n.title };
-          selectedReason = null;
-          reportDetails.value = "";
-          document.querySelectorAll(".reason-btn").forEach((b) => b.classList.remove("selected"));
-          notifOverlay.classList.add("hidden");
-          reportOverlay.classList.remove("hidden");
-        }
-      });
-      footer.appendChild(actionBtn);
-      card.appendChild(footer);
 
       notifList.appendChild(card);
     });
