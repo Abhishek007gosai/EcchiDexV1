@@ -1,4 +1,20 @@
 :root {
+  /* Dark is the default theme. */
+  --bg: #131310;
+  --surface: #1c1c17;
+  --surface-2: #28281f;
+  --border: #3a392c;
+  --text: #f2efe2;
+  --text-dim: #b6b19c;
+  --text-faint: #7f7a65;
+  --grad: linear-gradient(90deg, var(--green-dark), var(--green));
+  --amber: #e8a317;
+  --green: #4b9a51;
+  --green-dark: #1d4f24;
+  --hot: #e2597e;
+}
+
+[data-theme="light"] {
   --bg: #f4f1e6;
   --surface: #ffffff;
   --surface-2: #ece6d4;
@@ -6,7 +22,6 @@
   --text: #1b1b16;
   --text-dim: #5c5847;
   --text-faint: #8a8570;
-  --grad: linear-gradient(90deg, var(--green-dark), var(--green));
   --amber: #e8a317;
   --green: #2f6d34;
   --green-dark: #16311a;
@@ -89,6 +104,14 @@ html, body {
   position: relative;
 }
 
+.header-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
 .identity-right {
   display: flex;
   align-items: center;
@@ -113,6 +136,24 @@ html, body {
   max-height: 60vh;
   overflow-y: auto;
   margin-bottom: 4px;
+}
+
+/* The notifications sheet: keep the title and Close button fixed in place
+   and let only the list itself scroll, instead of the whole card growing
+   past the screen when there are many notifications. */
+#notif-overlay .sheet {
+  overflow: hidden;
+}
+#notif-overlay .sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+#notif-overlay .notif-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
 }
 
 .notif-card {
@@ -725,6 +766,9 @@ html, body {
 }
 
 .profile-hint { color: var(--text-faint); font-size: 14px; margin: 0; }
+
+.theme-card { margin-top: 14px; }
+.theme-card .label { font-weight: 700; color: var(--text); }
 
 .profile-header {
   display: flex;

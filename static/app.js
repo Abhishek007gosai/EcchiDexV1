@@ -11,11 +11,46 @@
     try {
       tg.ready();
       tg.expand();
-      tg.setHeaderColor && tg.setHeaderColor("#f4f1e6");
-      tg.setBackgroundColor && tg.setBackgroundColor("#f4f1e6");
     } catch (e) { /* not fatal */ }
   }
   const initData = tg ? tg.initData : "";
+
+  // ---------------------------------------------------------------------
+  // Theme (dark default, light optional) — persisted in localStorage.
+  // The <head> inline script already applied the saved choice before
+  // paint; this just keeps everything (Telegram chrome, meta tag, the
+  // toggle UI) in sync with it and handles switching.
+  // ---------------------------------------------------------------------
+  const THEME_COLORS = { dark: "#131310", light: "#f4f1e6" };
+
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  }
+
+  function applyTheme(theme) {
+    if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+
+    try { localStorage.setItem("touka-theme", theme); } catch (e) { /* not fatal */ }
+
+    const color = THEME_COLORS[theme];
+    const meta = document.getElementById("theme-color-meta");
+    if (meta) meta.setAttribute("content", color);
+    if (tg) {
+      try {
+        tg.setHeaderColor && tg.setHeaderColor(color);
+        tg.setBackgroundColor && tg.setBackgroundColor(color);
+      } catch (e) { /* not fatal */ }
+    }
+
+    themeButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.themeChoice === theme));
+  }
+
+  themeButtons.forEach((btn) => {
+    btn.addEventListener("click", () => applyTheme(btn.dataset.themeChoice));
+  });
+
+  applyTheme(currentTheme());
 
   function authHeaders() {
     return initData ? { "X-Telegram-Init-Data": initData } : {};
@@ -146,6 +181,7 @@
   const linkOverlay = el("link-overlay");
   const linkInput = el("link-input");
 
+  const profileBtn = el("profile-btn");
   const notifBtn = el("notif-btn");
   const notifBadge = el("notif-badge");
   const notifOverlay = el("notif-overlay");
@@ -158,6 +194,8 @@
   let selectedReason = null;
 
   const profileCard = el("profile-card");
+  const themeToggle = el("theme-toggle");
+  const themeButtons = themeToggle ? themeToggle.querySelectorAll(".pill-tab") : [];
 
   const toast = el("toast");
   let toastTimer = null;
@@ -238,6 +276,26 @@
     else if (target === "search") { showView("search"); renderSearchLanding(); }
     else if (target === "profile") { showView("profile"); openProfile(); }
   }));
+
+  if (profileBtn) {
+    profileBtn.addEventListener("click", () => { showView("profile"); openProfile(); });
+  }
+
+  // Header avatar — shows the user's real Telegram profile photo when the
+  // client exposes one, falling back to the generic person icon otherwise.
+  function renderHeaderAvatar() {
+    if (!profileBtn) return;
+    const photoUrl = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
+    if (!photoUrl) return;
+    const img = document.createElement("img");
+    img.src = photoUrl;
+    img.alt = "Profile";
+    img.className = "header-avatar-img";
+    img.onerror = () => { profileBtn.innerHTML = "&#128100;"; };
+    profileBtn.innerHTML = "";
+    profileBtn.appendChild(img);
+  }
+  renderHeaderAvatar();
 
   document.querySelectorAll("[data-back]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -449,8 +507,9 @@
     // fill the Available grid with one row per title. Instead, group them
     // by walking each title's relations (already on every available[]
     // item) and show only one representative per franchise — the
-    // earliest-released entry, e.g. Season 1 — with the rest reachable via
-    // the Prequel/Sequel cards inside that title's detail view.
+    // latest-released entry, e.g. the newest season — with the rest
+    // reachable via the Prequel/Sequel cards inside that title's detail
+    // view.
     const bySourceId = new Map();
     available.forEach((a) => {
       if (a.source === "anilist" && a.source_id != null) bySourceId.set(String(a.source_id), a);
@@ -479,7 +538,7 @@
       }
       group.forEach((g) => visited.add(String(g.id)));
 
-      group.sort((x, y) => (x.year || 9999) - (y.year || 9999) || x.id - y.id);
+      group.sort((x, y) => (y.year || 0) - (x.year || 0) || y.id - x.id);
       primaries.push(group[0]);
     });
 
