@@ -11,16 +11,11 @@
     try {
       tg.ready();
       tg.expand();
+      tg.setHeaderColor && tg.setHeaderColor("#f4f1e6");
+      tg.setBackgroundColor && tg.setBackgroundColor("#f4f1e6");
     } catch (e) { /* not fatal */ }
   }
   const initData = tg ? tg.initData : "";
-
-  if (tg) {
-    try {
-      tg.setHeaderColor && tg.setHeaderColor("#131310");
-      tg.setBackgroundColor && tg.setBackgroundColor("#131310");
-    } catch (e) { /* not fatal */ }
-  }
 
   function authHeaders() {
     return initData ? { "X-Telegram-Init-Data": initData } : {};
@@ -104,6 +99,7 @@
   const profileView = el("profile-view");
   const allViews = { app: appView, search: searchView, genre: genreView, profile: profileView };
 
+  const homeSearchInput = el("search-input");
   const searchViewInput = el("search-view-input");
   const searchResults = el("search-results");
   const searchResultsGroups = el("search-results-groups");
@@ -118,7 +114,7 @@
   const genreBrowseGrid = el("genre-browse-grid");
   const genreViewTitle = el("genre-view-title");
 
-  const pillTabs = document.querySelectorAll(".pill-tab[data-tab]");
+  const pillTabs = document.querySelectorAll(".pill-tab");
   const tabAll = el("tab-all");
   const tabLibrary = el("tab-library");
 
@@ -149,14 +145,6 @@
 
   const linkOverlay = el("link-overlay");
   const linkInput = el("link-input");
-
-  const headerSearchBtn = el("header-search-btn");
-  const notifBtn = el("notif-btn");
-  const notifBadge = el("notif-badge");
-  const notifOverlay = el("notif-overlay");
-  const notifList = el("notif-list");
-  const notifEmpty = el("notif-empty");
-  const notifClose = el("notif-close");
 
   const reportOverlay = el("report-overlay");
   const reportDetails = el("report-details");
@@ -244,20 +232,19 @@
     else if (target === "profile") { showView("profile"); openProfile(); }
   }));
 
-  if (headerSearchBtn) {
-    headerSearchBtn.addEventListener("click", () => {
-      showView("search");
-      renderSearchLanding();
-      setTimeout(() => searchViewInput.focus(), 50);
-    });
-  }
-
   document.querySelectorAll("[data-back]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const target = btn.dataset.back;
       if (target === "home") showView("app");
       else if (target === "search") showView("search");
     });
+  });
+
+  // Home's own search field is a shortcut into the dedicated Search page.
+  homeSearchInput.addEventListener("click", () => {
+    showView("search");
+    renderSearchLanding();
+    setTimeout(() => searchViewInput.focus(), 50);
   });
 
   // ---------------------------------------------------------------------
@@ -338,6 +325,12 @@
       genres.className = "poster-genres";
       genres.textContent = item.genres.join(", ");
       meta.appendChild(genres);
+    }
+    if (item.episodes) {
+      const eps = document.createElement("p");
+      eps.className = "poster-episodes";
+      eps.textContent = `${item.episodes} Episodes`;
+      meta.appendChild(eps);
     }
     card.appendChild(meta);
 
@@ -449,9 +442,8 @@
     // fill the Available grid with one row per title. Instead, group them
     // by walking each title's relations (already on every available[]
     // item) and show only one representative per franchise — the
-    // latest-released entry, e.g. the newest season — with the rest
-    // reachable via the Prequel/Sequel cards inside that title's detail
-    // view.
+    // earliest-released entry, e.g. Season 1 — with the rest reachable via
+    // the Prequel/Sequel cards inside that title's detail view.
     const bySourceId = new Map();
     available.forEach((a) => {
       if (a.source === "anilist" && a.source_id != null) bySourceId.set(String(a.source_id), a);
@@ -480,7 +472,7 @@
       }
       group.forEach((g) => visited.add(String(g.id)));
 
-      group.sort((x, y) => (y.year || 0) - (x.year || 0) || y.id - x.id);
+      group.sort((x, y) => (x.year || 9999) - (y.year || 9999) || x.id - y.id);
       primaries.push(group[0]);
     });
 
@@ -734,30 +726,23 @@
         });
         row.appendChild(joinBtn);
       } else {
-        const requestBtn = document.createElement("button");
-        requestBtn.className = "btn btn-primary";
-        requestBtn.textContent = "Request";
-        requestBtn.addEventListener("click", async () => {
-          requestBtn.disabled = true;
+        const voteBtn = document.createElement("button");
+        voteBtn.className = "btn btn-primary";
+        voteBtn.textContent = "Vote";
+        voteBtn.addEventListener("click", async () => {
+          voteBtn.disabled = true;
           try {
-            const result = await api("/api/request", {
-              method: "POST",
-              body: JSON.stringify({
-                title: anime.title,
-                source: anime.source || "anilist",
-                source_id: anime.source_id ?? anime.anilist_id,
-                poster_url: anime.poster_url,
-                genres: anime.genres || [],
-              }),
-            });
-            requestBtn.textContent = "\u2713 Requested";
-            showToast(result.already_requested ? "You already requested this." : "Request sent!");
+            const result = await api("/api/vote", { method: "POST", body: JSON.stringify({ title: anime.title }) });
+            voteBtn.textContent = result.already_voted
+              ? `\u2713 Already voted (${result.count})`
+              : `\u2713 Voted (${result.count})`;
+            showToast(result.already_voted ? "You already voted for this." : "Vote counted!");
           } catch (err) {
-            requestBtn.disabled = false;
-            showToast(err.message || "Couldn't send request right now.");
+            voteBtn.disabled = false;
+            showToast(err.message || "Couldn't send vote right now.");
           }
         });
-        row.appendChild(requestBtn);
+        row.appendChild(voteBtn);
       }
 
       if (profile && profile.role === "admin" && anime.anilist_id) {
@@ -1265,13 +1250,9 @@
     try {
       profile = await api("/api/profile");
       const displayName = profile.first_name || profile.username || "User";
-      const photoUrl = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
-      const avatarHtml = photoUrl
-        ? `<img class="profile-avatar profile-avatar-img" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(displayName)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className: 'profile-avatar', textContent: '${initials(displayName)}'}))" />`
-        : `<div class="profile-avatar">${initials(displayName)}</div>`;
       profileCard.innerHTML = `
         <div class="profile-header">
-          ${avatarHtml}
+          <div class="profile-avatar">${initials(displayName)}</div>
           <div>
             <div class="profile-name">${escapeHtml(displayName)}</div>
             <div class="profile-username">${profile.username ? "@" + escapeHtml(profile.username) : "no username"}</div>
@@ -1286,106 +1267,6 @@
       profileCard.innerHTML = `<p class="profile-hint">${escapeHtml(err.message || "Open this from inside Telegram to view your profile.")}</p>`;
     }
   }
-
-  // ---------------------------------------------------------------------
-  // Notifications (request accepted/rejected) — the bell in the header
-  // ---------------------------------------------------------------------
-  let notifications = [];
-
-  function renderNotifBadge(count) {
-    notifBadge.classList.toggle("hidden", !count);
-  }
-
-  function timeAgo(ts) {
-    if (!ts) return "";
-    const diff = Math.max(0, Date.now() / 1000 - ts);
-    if (diff < 60) return "just now";
-    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
-    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
-    return Math.floor(diff / 86400) + "d ago";
-  }
-
-  function renderNotifications() {
-    notifList.innerHTML = "";
-    notifEmpty.classList.toggle("hidden", notifications.length > 0);
-    notifications.forEach((n) => {
-      const accepted = n.status === "accepted";
-      const card = document.createElement("div");
-      card.className = "notif-card " + n.status + (n.seen ? "" : " unseen");
-
-      const header = document.createElement("div");
-      header.className = "notif-card-header";
-      const icon = document.createElement("span");
-      icon.className = "notif-card-icon";
-      icon.textContent = accepted ? "\u2713" : "\u2717";
-      const headline = document.createElement("span");
-      headline.className = "notif-card-headline";
-      headline.textContent = "ANIME REQUEST " + (accepted ? "ACCEPTED" : "REJECTED");
-      const time = document.createElement("span");
-      time.className = "notif-card-time";
-      time.textContent = timeAgo(n.responded_at);
-      header.appendChild(icon);
-      header.appendChild(headline);
-      header.appendChild(time);
-      card.appendChild(header);
-
-      const body = document.createElement("div");
-      body.className = "notif-card-body";
-      const thumb = document.createElement("div");
-      thumb.className = "notif-thumb";
-      thumbImg(thumb, n.poster_url, n.title);
-      body.appendChild(thumb);
-
-      const info = document.createElement("div");
-      info.className = "notif-card-info";
-      const title = document.createElement("div");
-      title.className = "notif-card-title";
-      title.textContent = n.title;
-      info.appendChild(title);
-      if (n.genres && n.genres.length) {
-        const genres = document.createElement("div");
-        genres.className = "notif-card-genres";
-        genres.textContent = n.genres.join(" \u2022 ");
-        info.appendChild(genres);
-      }
-      const note = document.createElement("div");
-      note.className = "notif-card-note";
-      note.textContent = n.note;
-      info.appendChild(note);
-      body.appendChild(info);
-      card.appendChild(body);
-
-      notifList.appendChild(card);
-    });
-  }
-
-  async function loadNotifications() {
-    try {
-      const data = await api("/api/notifications");
-      notifications = data.notifications || [];
-      renderNotifBadge(data.unseen_count || 0);
-    } catch (err) {
-      notifications = [];
-      renderNotifBadge(0);
-    }
-  }
-
-  notifBtn.addEventListener("click", async () => {
-    renderNotifications();
-    notifOverlay.classList.remove("hidden");
-    if (notifications.some((n) => !n.seen)) {
-      try {
-        await api("/api/notifications/seen", { method: "POST" });
-      } catch (err) { /* badge will just recheck next load */ }
-      notifications.forEach((n) => { n.seen = true; });
-      renderNotifBadge(0);
-      renderNotifications();
-    }
-  });
-  notifClose.addEventListener("click", () => notifOverlay.classList.add("hidden"));
-  notifOverlay.addEventListener("click", (e) => {
-    if (e.target === notifOverlay) notifOverlay.classList.add("hidden");
-  });
 
   // ---------------------------------------------------------------------
   // Data loading
@@ -1460,11 +1341,7 @@
 
   (async function init() {
     document.title = brandName;
-    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile(), loadNotifications()]);
+    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile()]);
     applyDeepLink();
   })();
-
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") loadNotifications();
-  });
 })();
