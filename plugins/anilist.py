@@ -164,7 +164,12 @@ class AniListSource(AnimeSource):
             })
         return {"results": results, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
-    def get_details(self, source_id) -> dict:
+    def get_details(self, source_id, use_cache: bool = True) -> dict:
+        if use_cache:
+            return self._cached(f"details:{source_id}", lambda: self._fetch_details(source_id))
+        return self._fetch_details(source_id)
+
+    def _fetch_details(self, source_id) -> dict:
         data = self._post(DETAILS_QUERY, {"id": int(source_id)})
         m = data["Media"]
         score = m.get("averageScore")
