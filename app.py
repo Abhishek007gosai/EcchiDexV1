@@ -24,6 +24,8 @@ import re
 import secrets
 import threading
 import time
+from collections import defaultdict, deque
+from functools import wraps
 from urllib.parse import parse_qsl, quote
 
 import requests
@@ -457,6 +459,80 @@ def is_admin(user: dict | None) -> bool:
     return bool(user) and user.get("id") in Config.ADMIN_IDS
 
 
+# ---------------------------------------------------------------------------
+# Spam / flood-wait protection
+#
+# In-memory sliding-window limiter, keyed per Telegram user (falling back to
+# IP only for the rare unauthenticated call). This matches the app's
+# existing architecture — a single gunicorn worker holding in-memory state
+# (see the AniList plugin's cache, and the module docstring above) — so a
+# plain dict is enough; there's no second process for it to be inconsistent
+# with. Admins are exempt so moderating the queue is never throttled.
+# ---------------------------------------------------------------------------
+_rate_lock = threading.Lock()
+_rate_hits: dict[str, deque] = defaultdict(deque)
+
+
+def _rate_limit_key(user: dict | None) -> str:
+    if user and user.get("id"):
+        return f"tg:{user['id']}"
+    return f"ip:{request.remote_addr or 'unknown'}"
+
+
+def _check_rate_limit(bucket: str, key: str, limit: int, window_seconds: float) -> bool:
+    """True if this call is allowed (and is recorded); False if `key` has
+    already made `limit` calls to `bucket` within the trailing
+    `window_seconds`."""
+    now = time.time()
+    dq_key = f"{bucket}:{key}"
+    with _rate_lock:
+        dq = _rate_hits[dq_key]
+        while dq and dq[0] <= now - window_seconds:
+            dq.popleft()
+        if len(dq) >= limit:
+            return False
+        dq.append(now)
+        return True
+
+
+def rate_limited(bucket: str, limit: int, window_seconds: float):
+    """Decorator for a Flask view: rejects with 429 once the calling user
+    exceeds `limit` calls to `bucket` per `window_seconds`. Use this for
+    endpoints that create/send something (requests, reports) on top of the
+    blanket per-request flood guard below, since spam there is cheap for
+    an abuser but costly for admins reading the Logs feed."""
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            user = current_user()
+            if is_admin(user):
+                return fn(*args, **kwargs)
+            key = _rate_limit_key(user)
+            if not _check_rate_limit(bucket, key, limit, window_seconds):
+                return jsonify(error="Too many requests — please slow down and try again in a bit."), 429
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+@app.before_request
+def _flood_guard():
+    """Blanket flood-wait protection for every API call, independent of
+    the stricter per-action limits above. Generous enough that normal use
+    (Home's several parallel loads, fast tab-switching, typing a search)
+    never comes close, but it stops a runaway client loop or a scripted
+    abuser from hammering the server."""
+    if not request.path.startswith("/api/"):
+        return None
+    user = current_user()
+    if is_admin(user):
+        return None
+    key = _rate_limit_key(user)
+    if not _check_rate_limit("global", key, 120, 60):
+        return jsonify(error="Too many requests — please slow down and try again in a bit."), 429
+    return None
+
+
 # A Telegram public username: 5-32 chars, must start with a letter, only
 # letters/digits/underscores after that (Telegram's own username rules).
 USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
@@ -671,6 +747,7 @@ def api_anilist_details(anilist_id):
 
 
 @app.post("/api/request")
+@rate_limited("request", limit=8, window_seconds=600)
 def api_request_anime():
     payload = request.get_json(force=True, silent=True) or {}
     title = (payload.get("title") or "").strip()
@@ -686,6 +763,11 @@ def api_request_anime():
         return jsonify(error="Open this inside Telegram to request an anime."), 401
 
     result = db.create_request(title, source, source_id, poster_url, genres, user["id"], _telegram_user_label(user))
+    if result["status"] == "limit_reached":
+        return jsonify(
+            error=f"You've got {result['limit']} pending requests already — wait for one to be "
+                  f"reviewed before requesting more."
+        ), 429
     if not result["already_requested"]:
         notify_new_request(result["id"], title, _telegram_user_label(user), poster_url)
     return jsonify(result)
@@ -730,6 +812,7 @@ def api_admin_respond_request(key):
 
 
 @app.post("/api/report")
+@rate_limited("report", limit=5, window_seconds=600)
 def api_report():
     payload = request.get_json(force=True, silent=True) or {}
     reason = (payload.get("reason") or "").strip()
