@@ -501,17 +501,24 @@ def accept_requests_for_title(title: str) -> int:
     return respond_to_request(_request_key(title), "accepted")
 
 
+NOTIFICATION_TTL_SECONDS = 24 * 60 * 60  # notifications auto-expire after 24h
+
+
 def get_user_notifications(telegram_id: int, limit: int = 30) -> dict:
-    """The current user's own resolved requests (accepted/rejected), most
-    recent first, plus how many of those they haven't seen yet — that
-    unseen count is what the notification bell badge shows. A user who has
-    never requested anything (or whose requests are all still pending)
-    gets an empty list and a zero count, i.e. an empty bell."""
-    docs = (
-        requests_col.find({"requested_by": telegram_id, "status": {"$ne": "pending"}})
-        .sort("responded_at", -1)
-        .limit(limit)
-    )
+    """The current user's own resolved requests (accepted/rejected) from the
+    last 24 hours, most recent first, plus how many of those they haven't
+    seen yet — that unseen count is what the notification bell badge shows.
+    Anything resolved more than 24h ago has aged out and no longer appears,
+    even if it was never opened. A user who has never requested anything
+    (or whose requests are all still pending, or all expired) gets an empty
+    list and a zero count, i.e. an empty bell."""
+    cutoff = time.time() - NOTIFICATION_TTL_SECONDS
+    fresh_filter = {
+        "requested_by": telegram_id,
+        "status": {"$ne": "pending"},
+        "responded_at": {"$gte": cutoff},
+    }
+    docs = requests_col.find(fresh_filter).sort("responded_at", -1).limit(limit)
     notifications = [
         {
             "id": d["_id"],
@@ -527,9 +534,7 @@ def get_user_notifications(telegram_id: int, limit: int = 30) -> dict:
         }
         for d in docs
     ]
-    unseen_count = requests_col.count_documents(
-        {"requested_by": telegram_id, "status": {"$ne": "pending"}, "seen": False}
-    )
+    unseen_count = requests_col.count_documents({**fresh_filter, "seen": False})
     return {"unseen_count": unseen_count, "notifications": notifications}
 
 
