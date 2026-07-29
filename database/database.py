@@ -23,7 +23,7 @@ _db = _client[Config.MONGODB_NAME]
 anime_col = _db["anime"]
 users_col = _db["users"]
 reports_col = _db["reports"]
-votes_col = _db["votes"]
+requests_col = _db["requests"]
 searches_col = _db["searches"]
 recent_searches_col = _db["recent_searches"]
 counters_col = _db["counters"]
@@ -32,7 +32,9 @@ counters_col = _db["counters"]
 def init_db():
     anime_col.create_index([("source", ASCENDING), ("source_id", ASCENDING)], unique=True)
     anime_col.create_index([("title", ASCENDING)])
-    votes_col.create_index([("title", ASCENDING)])
+    requests_col.create_index([("key", ASCENDING), ("requested_by", ASCENDING)])
+    requests_col.create_index([("status", ASCENDING)])
+    requests_col.create_index([("requested_by", ASCENDING), ("seen", ASCENDING)])
     searches_col.create_index([("count", ASCENDING)])
     recent_searches_col.create_index([("user_id", ASCENDING), ("searched_at", ASCENDING)])
 
@@ -103,6 +105,65 @@ def find_inherited_link(source: str, related_ids: list[str]) -> str | None:
     return related_doc["join_link"] if related_doc else None
 
 
+def get_franchise_neighbors(details: dict) -> list[dict]:
+    """Walk the full franchise relation graph (same traversal as
+    _family_source_ids — seasons, OVAs, movies, spin-offs, alternates) and,
+    considering only titles that are actually posted (have a join_link),
+    line the whole family up in release-chronological order (year, then
+    month/day to break ties within a year). Returns just the entry
+    immediately before `details` and the entry immediately after it in
+    that timeline — never more than two — so a detail sheet always shows
+    at most one "Prequel" card and one "Sequel" card, regardless of how
+    many AniList relation edges (Side Story, Alternative, Spin-off, ...)
+    the title actually has. `details` doesn't need to be posted itself —
+    its own year/month/day (from AniList) are used to place it in the
+    timeline even before it has a join link, so browsing an unposted
+    title still shows correct neighbors once other family members are
+    posted."""
+    source = details["source"]
+    source_id = str(details["source_id"])
+    related_ids = [str(x) for x in details.get("related_ids") or []]
+
+    family_ids = _family_source_ids(source, related_ids)
+    family_ids.discard(source_id)
+    docs = list(anime_col.find({
+        "source": source,
+        "source_id": {"$in": list(family_ids)},
+        "join_link": {"$nin": [None, ""]},
+    }))
+    docs.append({
+        "_id": None,
+        "source_id": source_id,
+        "title": details.get("title"),
+        "poster_url": details.get("poster_url"),
+        "year": details.get("year"),
+        "start_month": details.get("start_month"),
+        "start_day": details.get("start_day"),
+    })
+    if len(docs) < 2:
+        return []
+
+    def sort_key(d):
+        return (
+            d.get("year") if d.get("year") is not None else 9999,
+            d.get("start_month") if d.get("start_month") is not None else 13,
+            d.get("start_day") if d.get("start_day") is not None else 32,
+            str(d.get("_id")) if d.get("_id") is not None else d["source_id"],
+        )
+
+    docs.sort(key=sort_key)
+    idx = next(i for i, d in enumerate(docs) if d["source_id"] == source_id)
+
+    out = []
+    if idx > 0:
+        p = docs[idx - 1]
+        out.append({"id": p["_id"], "title": p["title"], "poster_url": p.get("poster_url"), "relation_type": "PREQUEL"})
+    if idx < len(docs) - 1:
+        s = docs[idx + 1]
+        out.append({"id": s["_id"], "title": s["title"], "poster_url": s.get("poster_url"), "relation_type": "SEQUEL"})
+    return out
+
+
 def upsert_anime(details: dict, added_by: int | None = None) -> int:
     """Insert a new catalog entry from a normalized source dict, or update
     the existing one if this (source, source_id) was already posted.
@@ -122,6 +183,8 @@ def upsert_anime(details: dict, added_by: int | None = None) -> int:
         "title": details["title"],
         "alt_title": details.get("alt_title"),
         "year": details.get("year"),
+        "start_month": details.get("start_month"),
+        "start_day": details.get("start_day"),
         "poster_url": details.get("poster_url"),
         "banner_url": details.get("banner_url"),
         "description": details.get("description"),
@@ -302,39 +365,179 @@ def create_report(anime_id: int | None, anime_title: str, reason: str, details: 
 
 
 # ---------------------------------------------------------------------------
-# Votes — "demand signal" for anime that isn't posted yet, replacing the
-# old Request Anime feature. Keyed by a normalized (lowercased) title so
-# "One Piece" and "one piece" count as the same title.
+# Requests — replaces the old Votes "demand signal". Unlike a vote count,
+# a request is something an admin actually responds to (accepted/rejected),
+# so each request is its own row (not just an incrementing counter) with
+# its own status the requester can be notified about. Rows are keyed by a
+# normalized (lowercased) title so "One Piece" and "one piece" count as the
+# same title, and grouped that way so one admin decision reaches every user
+# who asked for it.
 # ---------------------------------------------------------------------------
 
-def _vote_key(title: str) -> str:
+def _request_key(title: str) -> str:
     return title.strip().lower()
 
 
-def record_vote(title: str, telegram_id: int) -> dict:
-    """Returns {"count": int, "already_voted": bool}. Each Telegram user can
-    only count once per title — re-voting just returns the current count."""
-    key = _vote_key(title)
-    existing = votes_col.find_one({"_id": key})
-    if existing and telegram_id in existing.get("voters", []):
-        return {"count": existing["count"], "already_voted": True}
+def _request_ref(doc: dict) -> str:
+    """A short human-facing reference like 'AR-20260727-001' — cosmetic
+    (for the notification card footer), built from the request's own id
+    and creation date rather than stored separately."""
+    date_part = time.strftime("%Y%m%d", time.localtime(doc.get("created_at") or time.time()))
+    return f"AR-{date_part}-{str(doc['_id']).zfill(3)}"
 
-    updated = votes_col.find_one_and_update(
-        {"_id": key},
-        {
-            "$setOnInsert": {"title": title, "created_at": time.time()},
-            "$addToSet": {"voters": telegram_id},
-            "$inc": {"count": 1},
-        },
-        upsert=True,
-        return_document=True,
+
+DEFAULT_ACCEPT_NOTE = "Good news! Your requested anime has been accepted and will be added soon."
+DEFAULT_REJECT_NOTE = "Sorry, we're not able to add this title right now."
+
+
+def create_request(title: str, source: str | None, source_id, poster_url: str | None,
+                    genres: list[str] | None, telegram_id: int, telegram_name: str | None) -> dict:
+    """Returns {"status": str, "already_requested": bool, "id": int}. Each
+    Telegram user gets at most one active request per title — asking again
+    while it's still pending (or already accepted) just returns the
+    current status. A title that was previously rejected can be requested
+    again, which reopens it as a fresh pending request."""
+    key = _request_key(title)
+    existing = requests_col.find_one({"key": key, "requested_by": telegram_id})
+
+    if existing and existing["status"] != "rejected":
+        return {"status": existing["status"], "already_requested": True, "id": existing["_id"]}
+
+    now = time.time()
+    if existing:
+        requests_col.update_one(
+            {"_id": existing["_id"]},
+            {"$set": {
+                "status": "pending", "created_at": now, "responded_at": None,
+                "seen": True, "note": None, "poster_url": poster_url, "genres": genres or [],
+            }},
+        )
+        return {"status": "pending", "already_requested": False, "id": existing["_id"]}
+
+    new_id = _next_id("requests")
+    requests_col.insert_one({
+        "_id": new_id,
+        "key": key,
+        "title": title,
+        "source": source,
+        "source_id": str(source_id) if source_id is not None else None,
+        "poster_url": poster_url,
+        "genres": genres or [],
+        "requested_by": telegram_id,
+        "requested_by_name": telegram_name,
+        "status": "pending",
+        "created_at": now,
+        "responded_at": None,
+        "note": None,
+        # The requester made this themselves, so there's nothing new for
+        # the notification bell to surface yet — "seen" only turns false
+        # once an admin changes the status out from under them.
+        "seen": True,
+    })
+    return {"status": "pending", "already_requested": False, "id": new_id}
+
+
+def list_pending_requests() -> list[dict]:
+    """One row per distinct requested title (not per requester), for the
+    admin queue — grouped so an admin sees "12 people want Title X" instead
+    of 12 separate identical-looking rows."""
+    pipeline = [
+        {"$match": {"status": "pending"}},
+        {"$sort": {"created_at": 1}},
+        {"$group": {
+            "_id": "$key",
+            "title": {"$first": "$title"},
+            "source": {"$first": "$source"},
+            "source_id": {"$first": "$source_id"},
+            "poster_url": {"$first": "$poster_url"},
+            "count": {"$sum": 1},
+            "first_requested_at": {"$min": "$created_at"},
+        }},
+        {"$sort": {"count": -1, "first_requested_at": 1}},
+    ]
+    docs = list(requests_col.aggregate(pipeline))
+    for d in docs:
+        d["key"] = d.pop("_id")
+    return docs
+
+
+def respond_to_request(key: str, status: str, note: str | None = None) -> int:
+    """Apply an admin decision (accepted/rejected) to every pending request
+    for this title at once, and flag each as unseen so the requester's
+    notification bell picks it up. Returns how many requests were updated."""
+    result = requests_col.update_many(
+        {"key": key, "status": "pending"},
+        {"$set": {
+            "status": status,
+            "responded_at": time.time(),
+            "seen": False,
+            "note": note or (DEFAULT_ACCEPT_NOTE if status == "accepted" else DEFAULT_REJECT_NOTE),
+        }},
     )
-    return {"count": updated["count"], "already_voted": False}
+    return result.modified_count
 
 
-def get_vote_count(title: str) -> int:
-    doc = votes_col.find_one({"_id": _vote_key(title)})
-    return doc["count"] if doc else 0
+def resolve_request_by_id(request_id: int, status: str, note: str | None = None) -> int | None:
+    """Look up a single request row by its own numeric id — this is what
+    lets the log-channel Accept/Reject buttons use a short numeric
+    callback_data (Telegram caps callback_data at 64 bytes, and a full
+    title easily blows past that) — then apply the decision to every
+    pending request sharing that title, same as respond_to_request.
+    Returns None (instead of a count) if this particular request was
+    already resolved, so a double-tap on the log message's buttons is a
+    harmless no-op rather than re-firing notifications."""
+    doc = requests_col.find_one({"_id": request_id})
+    if not doc or doc["status"] != "pending":
+        return None
+    return respond_to_request(doc["key"], status, note)
+
+
+def accept_requests_for_title(title: str) -> int:
+    """Convenience wrapper around respond_to_request for the common case:
+    a title just got posted (a join link was set), so any pending request
+    for that exact title is resolved automatically — the admin doesn't
+    have to separately visit the requests queue for every title they add
+    directly. Returns how many requests were updated."""
+    return respond_to_request(_request_key(title), "accepted")
+
+
+def get_user_notifications(telegram_id: int, limit: int = 30) -> dict:
+    """The current user's own resolved requests (accepted/rejected), most
+    recent first, plus how many of those they haven't seen yet — that
+    unseen count is what the notification bell badge shows. A user who has
+    never requested anything (or whose requests are all still pending)
+    gets an empty list and a zero count, i.e. an empty bell."""
+    docs = (
+        requests_col.find({"requested_by": telegram_id, "status": {"$ne": "pending"}})
+        .sort("responded_at", -1)
+        .limit(limit)
+    )
+    notifications = [
+        {
+            "id": d["_id"],
+            "ref": _request_ref(d),
+            "title": d["title"],
+            "poster_url": d.get("poster_url"),
+            "genres": d.get("genres") or [],
+            "status": d["status"],
+            "note": d.get("note") or (DEFAULT_ACCEPT_NOTE if d["status"] == "accepted" else DEFAULT_REJECT_NOTE),
+            "requested_by_name": d.get("requested_by_name"),
+            "responded_at": d.get("responded_at"),
+            "seen": d.get("seen", True),
+        }
+        for d in docs
+    ]
+    unseen_count = requests_col.count_documents(
+        {"requested_by": telegram_id, "status": {"$ne": "pending"}, "seen": False}
+    )
+    return {"unseen_count": unseen_count, "notifications": notifications}
+
+
+def mark_notifications_seen(telegram_id: int) -> None:
+    requests_col.update_many(
+        {"requested_by": telegram_id, "seen": False},
+        {"$set": {"seen": True}},
+    )
 
 
 # ---------------------------------------------------------------------------
