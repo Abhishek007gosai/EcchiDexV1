@@ -159,6 +159,16 @@
   const notifEmpty = el("notif-empty");
   const notifClose = el("notif-close");
 
+  const storyRing = el("story-ring");
+  const storyOverlay = el("story-overlay");
+  const storyProgressRow = el("story-progress-row");
+  const storyTopbarTitle = el("story-topbar-title");
+  const storyClose = el("story-close");
+  const storyMediaWrap = el("story-media-wrap");
+  const storyCaption = el("story-caption");
+  const storyTapLeft = el("story-tap-left");
+  const storyTapRight = el("story-tap-right");
+
   const reportOverlay = el("report-overlay");
   const reportDetails = el("report-details");
   let selectedReason = null;
@@ -1429,6 +1439,118 @@
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Stories — admin-posted updates (new-title announcements or manual
+  // photo/video posts). Shown as a ring next to the brand name; tapping it
+  // opens a full-screen, tap-to-advance viewer. These don't auto-expire —
+  // an admin removes them from the bot side (see /stories in app.py).
+  // ---------------------------------------------------------------------
+  let stories = [];
+  let storyIndex = 0;
+  let storyTimer = null;
+  const STORY_PHOTO_MS = 5000;
+
+  async function loadStories() {
+    try {
+      stories = await api("/api/stories");
+    } catch (err) {
+      stories = [];
+    }
+    if (!storyRing) return;
+    storyRing.classList.toggle("hidden", stories.length === 0);
+    storyRing.classList.toggle("all-seen", stories.length > 0 && stories.every((s) => s.seen));
+  }
+
+  function clearStoryTimer() {
+    if (storyTimer) {
+      clearTimeout(storyTimer);
+      storyTimer = null;
+    }
+  }
+
+  function closeStoryViewer() {
+    clearStoryTimer();
+    storyOverlay.classList.add("hidden");
+    storyMediaWrap.innerHTML = "";
+    storyRing.classList.toggle("all-seen", stories.every((s) => s.seen));
+  }
+
+  function goToStory(index) {
+    clearStoryTimer();
+    if (index < 0) { closeStoryViewer(); return; }
+    if (index >= stories.length) { closeStoryViewer(); return; }
+    storyIndex = index;
+    renderCurrentStory();
+  }
+
+  function renderCurrentStory() {
+    const story = stories[storyIndex];
+    if (!story) { closeStoryViewer(); return; }
+
+    // Progress bars — one per story, filled for everything already passed.
+    storyProgressRow.innerHTML = "";
+    stories.forEach((_, i) => {
+      const bar = document.createElement("div");
+      bar.className = "story-progress-bar";
+      const fill = document.createElement("div");
+      fill.className = "story-progress-fill" + (i < storyIndex ? " filled" : "");
+      bar.appendChild(fill);
+      storyProgressRow.appendChild(bar);
+    });
+    const currentFill = storyProgressRow.children[storyIndex].firstElementChild;
+
+    storyTopbarTitle.textContent = story.kind === "auto_anime" ? "New on " + brandName : brandName;
+    storyCaption.textContent = story.caption || "";
+    storyMediaWrap.innerHTML = "";
+
+    if (!story.seen) {
+      story.seen = true;
+      api(`/api/stories/${story.id}/seen`, { method: "POST" }).catch(() => {});
+    }
+
+    if (story.is_video) {
+      const video = document.createElement("video");
+      video.src = story.media_src;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.addEventListener("timeupdate", () => {
+        if (video.duration) currentFill.style.width = `${(video.currentTime / video.duration) * 100}%`;
+      });
+      video.addEventListener("ended", () => goToStory(storyIndex + 1));
+      storyMediaWrap.appendChild(video);
+    } else {
+      const img = document.createElement("img");
+      img.src = story.media_src;
+      img.onerror = () => { img.src = generatedThumb(story.caption || "?"); };
+      storyMediaWrap.appendChild(img);
+      // Double rAF so the browser paints the 0%-width bar first, then the
+      // transition to 100% actually animates instead of jumping instantly.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        currentFill.classList.add("animating");
+        currentFill.style.transitionDuration = `${STORY_PHOTO_MS}ms`;
+        currentFill.style.width = "100%";
+      }));
+      storyTimer = setTimeout(() => goToStory(storyIndex + 1), STORY_PHOTO_MS);
+    }
+
+    if (story.anime_id) {
+      storyMediaWrap.style.cursor = "pointer";
+      storyMediaWrap.onclick = null; // tap zones handle nav; the anime_id is informational only for now
+    }
+  }
+
+  if (storyRing) {
+    storyRing.addEventListener("click", () => {
+      if (!stories.length) return;
+      storyOverlay.classList.remove("hidden");
+      const firstUnseen = stories.findIndex((s) => !s.seen);
+      goToStory(firstUnseen === -1 ? 0 : firstUnseen);
+    });
+  }
+  if (storyClose) storyClose.addEventListener("click", closeStoryViewer);
+  if (storyTapLeft) storyTapLeft.addEventListener("click", () => goToStory(storyIndex - 1));
+  if (storyTapRight) storyTapRight.addEventListener("click", () => goToStory(storyIndex + 1));
+
   notifBtn.addEventListener("click", async () => {
     renderNotifications();
     notifOverlay.classList.remove("hidden");
@@ -1522,11 +1644,11 @@
 
   (async function init() {
     document.title = brandName;
-    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile(), loadNotifications()]);
+    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile(), loadNotifications(), loadStories()]);
     applyDeepLink();
   })();
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") loadNotifications();
+    if (document.visibilityState === "visible") { loadNotifications(); loadStories(); }
   });
 })();
