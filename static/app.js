@@ -175,6 +175,28 @@
   }
 
   // ---------------------------------------------------------------------
+  // localStorage catalog cache — survives page reloads / restarts
+  // ---------------------------------------------------------------------
+  const CATALOG_CACHE_KEY = "anime_catalog_v1";
+  const CATALOG_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+  function loadCachedCatalog() {
+    try {
+      const raw = localStorage.getItem(CATALOG_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Date.now() - parsed.ts > CATALOG_CACHE_TTL) return null;
+      return parsed.data;
+    } catch (e) { return null; }
+  }
+
+  function saveCatalogCache(data) {
+    try {
+      localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+    } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------
   let trending = [];
@@ -1460,7 +1482,27 @@
 
   (async function init() {
     document.title = brandName;
+    // Render instantly from localStorage so the UI never looks blank
+    const cached = loadCachedCatalog();
+    if (cached) {
+      trending = cached.trending || [];
+      popular = cached.popular || [];
+      mostPopular = cached.mostPopular || [];
+      popularHasNext = cached.popularHasNext || false;
+      mostPopularHasNext = cached.mostPopularHasNext || false;
+      renderTrending();
+      renderTopAiring();
+      renderPopularGrid();
+    }
     await Promise.all([loadDiscover(), loadAvailable(), preloadProfile(), loadNotifications()]);
+    // Save fresh data for next reload
+    saveCatalogCache({
+      trending,
+      popular,
+      mostPopular,
+      popularHasNext,
+      mostPopularHasNext,
+    });
     applyDeepLink();
   })();
 
