@@ -1031,34 +1031,55 @@
     });
   }
 
-  async function renderRecentSearches() {
-    recentSearchList.innerHTML = "";
-    let items = [];
+  // Recent Searches is personal per-device history, kept in localStorage
+  // only — it never touches the server/database, unlike Popular Searches
+  // above (which is a shared aggregate everyone contributes to and reads).
+  const RECENT_SEARCH_KEY = "touka-recent-searches";
+  const RECENT_SEARCH_LIMIT = 10;
+
+  function getLocalRecentSearches() {
     try {
-      items = await api("/api/search/recent?limit=10");
-    } catch (err) { /* silently empty */ }
+      const raw = localStorage.getItem(RECENT_SEARCH_KEY);
+      const items = raw ? JSON.parse(raw) : [];
+      return Array.isArray(items) ? items : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function addLocalRecentSearch(query) {
+    try {
+      const items = getLocalRecentSearches().filter((q) => q.toLowerCase() !== query.toLowerCase());
+      items.unshift(query);
+      localStorage.setItem(RECENT_SEARCH_KEY, JSON.stringify(items.slice(0, RECENT_SEARCH_LIMIT)));
+    } catch (err) { /* localStorage unavailable — not fatal, just no history */ }
+  }
+
+  function clearLocalRecentSearches() {
+    try { localStorage.removeItem(RECENT_SEARCH_KEY); } catch (err) { /* not fatal */ }
+  }
+
+  function renderRecentSearches() {
+    recentSearchList.innerHTML = "";
+    const items = getLocalRecentSearches();
     recentSearchSection.classList.toggle("hidden", items.length === 0);
-    items.forEach((item) => {
+    items.forEach((query) => {
       const row = document.createElement("div");
       row.className = "popular-search-row";
       row.innerHTML = `<span class="popular-search-icon">\u{1F551}</span>
-        <span class="popular-search-text">${escapeHtml(item.query)}</span>
+        <span class="popular-search-text">${escapeHtml(query)}</span>
         <span class="popular-search-arrow">\u2197</span>`;
       row.addEventListener("click", () => {
-        searchViewInput.value = item.query;
-        runLibrarySearch(item.query);
+        searchViewInput.value = query;
+        runLibrarySearch(query);
       });
       recentSearchList.appendChild(row);
     });
   }
 
-  recentSearchClear.addEventListener("click", async () => {
-    try {
-      await api("/api/search/recent/clear", { method: "POST" });
-      renderRecentSearches();
-    } catch (err) {
-      showToast(err.message || "Couldn't clear recent searches");
-    }
+  recentSearchClear.addEventListener("click", () => {
+    clearLocalRecentSearches();
+    renderRecentSearches();
   });
 
   popularSearchRefresh.addEventListener("click", async () => {
@@ -1122,6 +1143,7 @@
   }
 
   function trackConfirmedSearch(title) {
+    addLocalRecentSearch(title);
     api("/api/search/track", { method: "POST", body: JSON.stringify({ query: title } ) }).catch(() => {});
   }
 
