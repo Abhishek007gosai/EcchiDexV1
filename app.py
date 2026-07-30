@@ -29,7 +29,7 @@ from functools import wraps
 from urllib.parse import parse_qsl, quote
 
 import requests
-from flask import Flask, Response, abort, jsonify, render_template, request
+from flask import Flask, abort, jsonify, render_template, request
 from flask_compress import Compress
 
 from config import Config
@@ -151,54 +151,6 @@ async def cmd_anidex(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
 
 
-async def on_story_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """An admin sending a photo or video straight to the bot (private chat)
-    becomes a new Story — no separate upload command needed, the caption
-    (if any) becomes the story's caption. Telegram hosts the actual file;
-    we only keep its file_id and resolve it on demand (see
-    api_story_media), so no media storage/hosting of our own is needed."""
-    message = update.message
-    chat = update.effective_chat
-    user = update.effective_user
-    if chat.type != "private" or not user or user.id not in Config.ADMIN_IDS:
-        return
-
-    if message.video:
-        file_id = message.video.file_id
-        kind = "manual_video"
-    elif message.photo:
-        file_id = message.photo[-1].file_id  # largest available size
-        kind = "manual_photo"
-    else:
-        return
-
-    caption = (message.caption or "").strip() or None
-    await asyncio.to_thread(db.create_story, kind=kind, caption=caption, created_by=user.id, file_id=file_id)
-    await message.reply_text("\u2705 Posted as a story.")
-
-
-async def cmd_stories(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin-only: list active stories with a delete button on each. Stories
-    never auto-expire, so this is the only way to remove one (besides a new
-    title's auto-generated story, which goes away if that title is
-    unposted, but that path isn't wired up — delete it here instead)."""
-    user = update.effective_user
-    if not user or user.id not in Config.ADMIN_IDS:
-        return
-    stories = await asyncio.to_thread(db.list_active_stories)
-    if not stories:
-        await update.message.reply_text("No active stories.")
-        return
-    rows = []
-    for s in stories:
-        label = (s.get("caption") or s["kind"].replace("_", " "))[:40]
-        rows.append([InlineKeyboardButton(f"\U0001f5d1 {label}", callback_data=f"story:delete:{s['_id']}")])
-    await update.message.reply_text(
-        f"{len(stories)} active {'story' if len(stories) == 1 else 'stories'} \u2014 tap to delete:",
-        reply_markup=InlineKeyboardMarkup(rows),
-    )
-
-
 # --- Callback query routing ------------------------------------------------
 
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -206,17 +158,6 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = q.data or ""
     parts = data.split(":")
     action = parts[0]
-
-    if action == "story":
-        _, subaction, story_id = parts
-        if subaction == "delete":
-            if not update.effective_user or update.effective_user.id not in Config.ADMIN_IDS:
-                await q.answer("Admins only", show_alert=True)
-                return
-            await asyncio.to_thread(db.delete_story, int(story_id))
-            await q.answer("Deleted")
-            await q.edit_message_text("\U0001f5d1 Story deleted.")
-        return
 
     if action == "noop":
         await q.answer()
@@ -844,63 +785,6 @@ def api_notifications_seen():
     return jsonify(status="ok")
 
 
-@app.get("/api/stories")
-def api_stories():
-    user = current_user()
-    viewer_id = user["id"] if user else None
-    stories = db.list_active_stories(viewer_id)
-    return jsonify([
-        {
-            "id": s["_id"],
-            "kind": s["kind"],
-            "caption": s.get("caption"),
-            "anime_id": s.get("anime_id"),
-            "seen": s["seen"],
-            "is_video": s["kind"] == "manual_video",
-            # An auto-anime story already has a plain hosted poster URL; a
-            # manually-posted one only has a Telegram file_id, so it's
-            # served through our own proxy instead (keeps the bot token
-            # server-side only — see api_story_media below).
-            "media_src": s["media_url"] or f"/api/stories/{s['_id']}/media",
-        }
-        for s in stories
-    ])
-
-
-@app.post("/api/stories/<int:story_id>/seen")
-def api_story_seen(story_id):
-    user = current_user()
-    if user:
-        db.mark_story_seen(story_id, user["id"])
-    return jsonify(status="ok")
-
-
-@app.get("/api/stories/<int:story_id>/media")
-def api_story_media(story_id):
-    story = db.get_story(story_id)
-    if not story or not story.get("file_id"):
-        abort(404)
-    try:
-        meta = requests.get(
-            f"https://api.telegram.org/bot{Config.BOT_TOKEN}/getFile",
-            params={"file_id": story["file_id"]}, timeout=10,
-        ).json()
-        file_path = meta.get("result", {}).get("file_path")
-        if not file_path:
-            abort(404)
-        media = requests.get(f"https://api.telegram.org/file/bot{Config.BOT_TOKEN}/{file_path}", timeout=20)
-        media.raise_for_status()
-    except requests.RequestException:
-        abort(502)
-    mimetype = "video/mp4" if story["kind"] == "manual_video" else "image/jpeg"
-    resp = Response(media.content, mimetype=mimetype)
-    # The bytes behind a given file_id never change, so this is safe to
-    # cache hard in the browser rather than re-proxying through Telegram
-    # on every view.
-    resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
-    return resp
-
-
 @app.get("/api/admin/requests")
 def api_admin_requests():
     user = current_user()
@@ -1102,9 +986,7 @@ def build_bot_app() -> Application | None:
     application = Application.builder().token(Config.BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("anidex", cmd_anidex))
-    application.add_handler(CommandHandler("stories", cmd_stories))
     application.add_handler(CallbackQueryHandler(on_callback))
-    application.add_handler(MessageHandler((filters.PHOTO | filters.VIDEO) & filters.ChatType.PRIVATE, on_story_media))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_search))
     return application
 
