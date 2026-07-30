@@ -8,7 +8,6 @@ import time
 import requests
 
 from config import Config
-from database import get_cache, set_cache
 from plugins.base import AnimeSource
 
 SEARCH_QUERY = """
@@ -121,7 +120,7 @@ class AniListSource(AnimeSource):
     name = "anilist"
 
     def __init__(self):
-        self._session = requests.Session()
+        self._cache: dict[str, tuple[float, dict]] = {}
 
     def _post(self, query: str, variables: dict) -> dict:
         # AniList's public API rate-limits aggressively. When several
@@ -131,7 +130,7 @@ class AniListSource(AnimeSource):
         # what's really just "try again in a moment".
         last_exc = None
         for attempt in range(3):
-            resp = self._session.post(
+            resp = requests.post(
                 Config.ANILIST_ENDPOINT,
                 json={"query": query, "variables": variables},
                 timeout=10,
@@ -228,12 +227,12 @@ class AniListSource(AnimeSource):
     # -- Extra: powers Home's Trending/Top Airing feeds (not part of the shared interface) --
 
     def _cached(self, key: str, fetch):
-        ttl = Config.CATALOG_CACHE_TTL
-        cached = get_cache(key, ttl)
-        if cached is not None:
-            return cached
+        now = time.time()
+        cached = self._cache.get(key)
+        if cached and now - cached[0] < Config.CATALOG_CACHE_TTL:
+            return cached[1]
         value = fetch()
-        set_cache(key, value)
+        self._cache[key] = (now, value)
         return value
 
     def _discover(self, sort: str, page: int = 1, query: str = DISCOVER_QUERY, cache_prefix: str = "") -> dict:
