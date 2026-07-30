@@ -26,7 +26,6 @@ reports_col = _db["reports"]
 requests_col = _db["requests"]
 searches_col = _db["searches"]
 counters_col = _db["counters"]
-stories_col = _db["stories"]
 
 
 def init_db():
@@ -38,7 +37,6 @@ def init_db():
     requests_col.create_index([("requested_by", ASCENDING), ("seen", ASCENDING)])
     requests_col.create_index([("requested_by", ASCENDING), ("responded_at", ASCENDING)])
     searches_col.create_index([("count", ASCENDING)])
-    stories_col.create_index([("created_at", ASCENDING)])
 
 
 def _next_id(counter_name: str) -> int:
@@ -218,10 +216,6 @@ def upsert_anime(details: dict, added_by: int | None = None) -> int:
             "created_at": now,
             **fields,
         })
-        create_story(
-            kind="auto_anime", caption=fields["title"], created_by=added_by,
-            media_url=fields.get("poster_url"), anime_id=new_id,
-        )
         return new_id
     except DuplicateKeyError:
         # A concurrent call for this exact (source, source_id) — e.g. two
@@ -601,60 +595,6 @@ def record_search(query: str) -> None:
 def get_popular_searches(limit: int = 6) -> list[dict]:
     docs = searches_col.find().sort("count", -1).limit(limit)
     return [{"query": d["display"], "count": d["count"]} for d in docs]
-
-
-# ---------------------------------------------------------------------------
-# Stories — admin-only ephemeral-style posts (photo/video, or an automatic
-# "new title added" card), shown as a ring in the mini app. Unlike the
-# classic Instagram/WhatsApp pattern these do NOT auto-expire — they stay
-# until an admin deletes them, per how this deployment wants it run.
-# ---------------------------------------------------------------------------
-
-def create_story(kind: str, caption: str | None, created_by: int | None,
-                  media_url: str | None = None, file_id: str | None = None,
-                  anime_id: int | None = None) -> dict:
-    """kind is "auto_anime" (new-title announcement — media_url is the
-    poster, no Telegram file involved), "manual_photo", or "manual_video"
-    (an admin sent a photo/video straight to the bot — file_id is
-    Telegram's own reference to it, resolved to bytes on demand by the
-    Flask media-proxy route rather than stored here)."""
-    story_id = _next_id("story")
-    doc = {
-        "_id": story_id,
-        "kind": kind,
-        "media_url": media_url,
-        "file_id": file_id,
-        "caption": caption,
-        "anime_id": anime_id,
-        "created_by": created_by,
-        "created_at": time.time(),
-        "seen_by": [],
-    }
-    stories_col.insert_one(doc)
-    return doc
-
-
-def list_active_stories(viewer_id: int | None = None) -> list[dict]:
-    docs = list(stories_col.find().sort("created_at", 1))
-    for d in docs:
-        d["seen"] = bool(viewer_id) and viewer_id in d.get("seen_by", [])
-    return docs
-
-
-def mark_story_seen(story_id: int, telegram_id: int) -> None:
-    stories_col.update_one({"_id": story_id}, {"$addToSet": {"seen_by": telegram_id}})
-
-
-def delete_story(story_id: int) -> bool:
-    return stories_col.delete_one({"_id": story_id}).deleted_count > 0
-
-
-def has_unseen_stories(telegram_id: int) -> bool:
-    return stories_col.count_documents({"seen_by": {"$ne": telegram_id}}) > 0
-
-
-def get_story(story_id: int) -> dict | None:
-    return stories_col.find_one({"_id": story_id})
 
 
 def clear_popular_searches() -> None:
