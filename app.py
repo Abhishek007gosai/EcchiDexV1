@@ -658,9 +658,6 @@ def api_search_track():
     query = (payload.get("query") or "").strip()
     if query:
         db.record_search(query)
-        user = current_user()
-        if user:
-            db.record_recent_search(user["id"], query)
     return jsonify(status="ok")
 
 
@@ -676,24 +673,6 @@ def api_search_clear():
     if not is_admin(user):
         abort(403)
     db.clear_popular_searches()
-    return jsonify(status="cleared")
-
-
-@app.get("/api/search/recent")
-def api_search_recent():
-    user = current_user()
-    if not user:
-        return jsonify([])
-    limit = request.args.get("limit", 10, type=int)
-    return jsonify(db.get_recent_searches(user["id"], limit))
-
-
-@app.post("/api/search/recent/clear")
-def api_search_recent_clear():
-    user = current_user()
-    if not user:
-        abort(403)
-    db.clear_recent_searches(user["id"])
     return jsonify(status="cleared")
 
 
