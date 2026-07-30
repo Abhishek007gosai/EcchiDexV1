@@ -104,6 +104,7 @@
   const profileView = el("profile-view");
   const allViews = { app: appView, search: searchView, genre: genreView, profile: profileView };
 
+  const homeSearchInput = el("search-input");
   const searchViewInput = el("search-view-input");
   const searchResults = el("search-results");
   const searchResultsGroups = el("search-results-groups");
@@ -150,7 +151,7 @@
   const linkOverlay = el("link-overlay");
   const linkInput = el("link-input");
 
-  const headerSearchBtn = el("header-search-btn");
+  const profileBtn = el("profile-btn");
   const notifBtn = el("notif-btn");
   const notifBadge = el("notif-badge");
   const notifOverlay = el("notif-overlay");
@@ -172,28 +173,6 @@
     toast.classList.remove("hidden");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.add("hidden"), 2200);
-  }
-
-  // ---------------------------------------------------------------------
-  // localStorage catalog cache — survives page reloads / restarts
-  // ---------------------------------------------------------------------
-  const CATALOG_CACHE_KEY = "anime_catalog_v1";
-  const CATALOG_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-
-  function loadCachedCatalog() {
-    try {
-      const raw = localStorage.getItem(CATALOG_CACHE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (Date.now() - parsed.ts > CATALOG_CACHE_TTL) return null;
-      return parsed.data;
-    } catch (e) { return null; }
-  }
-
-  function saveCatalogCache(data) {
-    try {
-      localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
-    } catch (e) {}
   }
 
   // ---------------------------------------------------------------------
@@ -266,13 +245,32 @@
     else if (target === "profile") { showView("profile"); openProfile(); }
   }));
 
-  if (headerSearchBtn) {
-    headerSearchBtn.addEventListener("click", () => {
-      showView("search");
-      renderSearchLanding();
-      setTimeout(() => searchViewInput.focus(), 50);
-    });
+  if (profileBtn) {
+    profileBtn.addEventListener("click", () => { showView("profile"); openProfile(); });
   }
+
+  // Header avatar — shows the user's real Telegram profile photo when the
+  // client exposes one, falling back to the generic person icon otherwise.
+  function renderHeaderAvatar() {
+    if (!profileBtn) return;
+    const photoUrl = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
+    if (!photoUrl) return;
+    const img = document.createElement("img");
+    img.src = photoUrl;
+    img.alt = "Profile";
+    img.className = "header-avatar-img";
+    img.onerror = () => { profileBtn.innerHTML = "&#128100;"; };
+    profileBtn.innerHTML = "";
+    profileBtn.appendChild(img);
+  }
+  renderHeaderAvatar();
+
+  // Home's own search bar is a shortcut into the dedicated Search page.
+  homeSearchInput.addEventListener("click", () => {
+    showView("search");
+    renderSearchLanding();
+    setTimeout(() => searchViewInput.focus(), 50);
+  });
 
   document.querySelectorAll("[data-back]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -374,6 +372,21 @@
   // ---------------------------------------------------------------------
   // Render: Home "All" tab — Trending, Top Airing (+ Load more)
   // ---------------------------------------------------------------------
+
+  // Shimmer placeholders shown the instant the Home tab opens, replaced as
+  // soon as each section's real data arrives — makes first load (and any
+  // cold-start delay while the server/cache spins back up) feel immediate
+  // instead of showing blank space under each header.
+  function renderSkeletonRow(container, count) {
+    if (!container) return;
+    container.innerHTML = "";
+    for (let i = 0; i < count; i++) {
+      const card = document.createElement("div");
+      card.className = "skeleton-card";
+      container.appendChild(card);
+    }
+  }
+
   function renderTrending() {
     trendingRow.innerHTML = "";
     const availIndex = buildAvailableIndex();
@@ -1413,6 +1426,9 @@
   // Data loading
   // ---------------------------------------------------------------------
   async function loadDiscover() {
+    renderSkeletonRow(trendingRow, 4);
+    renderSkeletonRow(topAiringList, 4);
+    renderSkeletonRow(popularGridList, 6);
     try {
       const [trendingData, popularData, mostPopularData] = await Promise.all([
         api("/api/catalog/trending"),
@@ -1482,27 +1498,7 @@
 
   (async function init() {
     document.title = brandName;
-    // Render instantly from localStorage so the UI never looks blank
-    const cached = loadCachedCatalog();
-    if (cached) {
-      trending = cached.trending || [];
-      popular = cached.popular || [];
-      mostPopular = cached.mostPopular || [];
-      popularHasNext = cached.popularHasNext || false;
-      mostPopularHasNext = cached.mostPopularHasNext || false;
-      renderTrending();
-      renderTopAiring();
-      renderPopularGrid();
-    }
     await Promise.all([loadDiscover(), loadAvailable(), preloadProfile(), loadNotifications()]);
-    // Save fresh data for next reload
-    saveCatalogCache({
-      trending,
-      popular,
-      mostPopular,
-      popularHasNext,
-      mostPopularHasNext,
-    });
     applyDeepLink();
   })();
 

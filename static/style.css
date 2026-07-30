@@ -48,7 +48,31 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: 14px;
+}
+
+.header-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding-bottom: 20px;
+}
+
+.search-row.header-search-wrap {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.header-avatar-img {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  flex-shrink: 0;
 }
 
 .identity-left {
@@ -89,12 +113,6 @@ html, body {
   position: relative;
   overflow: hidden;
   flex: none;
-}
-
-.identity-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .notif-badge {
@@ -448,6 +466,23 @@ html, body {
   text-align: center;
   padding: 40px 0;
 }
+
+/* ---------------- skeleton loading placeholders ---------------- */
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.skeleton-card {
+  border-radius: 12px;
+  background: var(--surface-2);
+  flex: none;
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.hscroll .skeleton-card { width: 132px; height: 178px; }
+.popular-grid .skeleton-card { height: 178px; }
 
 /* ---------------- Popular grid (2-column, reuses poster-card) ---------------- */
 
