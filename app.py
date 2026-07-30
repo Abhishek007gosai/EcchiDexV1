@@ -61,6 +61,8 @@ app.config["COMPRESS_MIMETYPES"] = [
 ]
 Compress(app)
 
+db.init_db()
+
 # ---------------------------------------------------------------------------
 # Telegram bot (python-telegram-bot v20+, async) glued into sync Flask via a
 # single long-lived event loop.
@@ -68,12 +70,10 @@ Compress(app)
 
 bot_app: Application | None = None
 _loop = asyncio.new_event_loop()
-_loop_lock = threading.Lock()
 
 
 def run_async(coro):
-    with _loop_lock:
-        return _loop.run_until_complete(coro)
+    return _loop.run_until_complete(coro)
 
 
 # In-memory session store for short multi-step conversations (currently
@@ -600,6 +600,22 @@ def index():
 
 @app.get("/healthz")
 def healthz():
+    # Also opportunistically warms the Trending/Popular/Most-popular cache
+    # (see plugins/anilist.py's _cached — same TTL Home reads from). On a
+    # free hosting tier that spins down when idle, the very first real
+    # visitor after a cold start would otherwise be the one who eats a
+    # live AniList round trip on all three sections at once. Pointing an
+    # external uptime monitor (UptimeRobot, cron-job.org, etc.) at this
+    # endpoint every ~10 minutes keeps both the process warm *and* this
+    # cache fresh, so real users essentially never see a cold load.
+    # Best-effort: a slow/unreachable AniList must never fail the health
+    # check itself, so failures here are swallowed.
+    try:
+        SOURCES["anilist"].get_trending()
+        SOURCES["anilist"].get_popular()
+        SOURCES["anilist"].get_most_popular()
+    except Exception:
+        pass
     return jsonify(status="ok")
 
 
@@ -711,9 +727,7 @@ def api_available():
     # pre-existing data from before this behavior — so the public
     # Available tab never shows an unjoinable title even if one somehow
     # exists without a link.
-    resp = jsonify([a for a in db.list_available() if a.get("available")])
-    resp.headers["Cache-Control"] = "public, max-age=60"
-    return resp
+    return jsonify([a for a in db.list_available() if a.get("available")])
 
 
 def _related_posted(details: dict) -> list[dict]:
@@ -978,14 +992,6 @@ def _telegram_user_label(user: dict) -> str:
 def webhook(secret):
     if secret != Config.WEBHOOK_SECRET or bot_app is None:
         abort(403)
-    # Bot may still be initializing in the background after a restart
-    if not _bot_init_done:
-        for _ in range(100):  # wait up to 5 seconds
-            if _bot_init_done:
-                break
-            time.sleep(0.05)
-        if not _bot_init_done:
-            abort(503)
     update = Update.de_json(request.get_json(force=True), bot_app.bot)
     run_async(bot_app.process_update(update))
     return "ok"
@@ -1006,39 +1012,12 @@ def build_bot_app() -> Application | None:
     return application
 
 
-# ---------------------------------------------------------------------------
-# Lazy initialization — don't block the worker boot on network calls
-# ---------------------------------------------------------------------------
-
-_bot_init_done = False
-
-
-def _init_background():
-    """Create indexes and initialize the bot in a background thread so
-    the web server starts accepting HTTP requests immediately after a
-    restart. MongoDB and Telegram can be slow or briefly unreachable
-    right after a deploy — this prevents gunicorn from timing out the
-    worker and retry-looping the boot."""
-    global _bot_init_done
-    try:
-        db.init_db()
-    except Exception:
-        pass  # MongoDB may still be warming up; queries work without indexes
-
-    if bot_app is not None:
-        try:
-            run_async(bot_app.initialize())
-            if Config.WEBAPP_URL.startswith("https://"):
-                webhook_url = f"{Config.WEBAPP_URL}/webhook/{Config.WEBHOOK_SECRET}"
-                run_async(bot_app.bot.set_webhook(url=webhook_url))
-        except Exception:
-            pass  # Will retry on the next webhook call
-    _bot_init_done = True
-
-
 bot_app = build_bot_app()
 if bot_app is not None:
-    threading.Thread(target=_init_background, daemon=True).start()
+    run_async(bot_app.initialize())
+    if Config.WEBAPP_URL.startswith("https://"):
+        webhook_url = f"{Config.WEBAPP_URL}/webhook/{Config.WEBHOOK_SECRET}"
+        run_async(bot_app.bot.set_webhook(url=webhook_url))
 
 
 if __name__ == "__main__":
