@@ -25,7 +25,6 @@ users_col = _db["users"]
 reports_col = _db["reports"]
 requests_col = _db["requests"]
 searches_col = _db["searches"]
-recent_searches_col = _db["recent_searches"]
 counters_col = _db["counters"]
 
 
@@ -38,7 +37,6 @@ def init_db():
     requests_col.create_index([("requested_by", ASCENDING), ("seen", ASCENDING)])
     requests_col.create_index([("requested_by", ASCENDING), ("responded_at", ASCENDING)])
     searches_col.create_index([("count", ASCENDING)])
-    recent_searches_col.create_index([("user_id", ASCENDING), ("searched_at", ASCENDING)])
 
 
 def _next_id(counter_name: str) -> int:
@@ -601,43 +599,4 @@ def get_popular_searches(limit: int = 6) -> list[dict]:
 
 def clear_popular_searches() -> None:
     searches_col.delete_many({})
-
-
-# ---------------------------------------------------------------------------
-# Recent searches — per-user history, kept separate from the global
-# popular-searches counts above. Only the most recent MAX_RECENT_SEARCHES
-# entries are kept per user.
-# ---------------------------------------------------------------------------
-
-MAX_RECENT_SEARCHES = 15
-
-
-def record_recent_search(user_id: int, query: str) -> None:
-    query = query.strip()
-    if len(query) < 2:
-        return
-    key = query.lower()
-    recent_searches_col.update_one(
-        {"user_id": user_id, "key": key},
-        {"$set": {"display": query, "searched_at": time.time()}},
-        upsert=True,
-    )
-    # Trim anything past the most recent MAX_RECENT_SEARCHES for this user.
-    extra_ids = [
-        d["_id"] for d in recent_searches_col
-        .find({"user_id": user_id}, {"_id": 1})
-        .sort("searched_at", -1)
-        .skip(MAX_RECENT_SEARCHES)
-    ]
-    if extra_ids:
-        recent_searches_col.delete_many({"_id": {"$in": extra_ids}})
-
-
-def get_recent_searches(user_id: int, limit: int = 10) -> list[dict]:
-    docs = recent_searches_col.find({"user_id": user_id}).sort("searched_at", -1).limit(limit)
-    return [{"query": d["display"]} for d in docs]
-
-
-def clear_recent_searches(user_id: int) -> None:
-    recent_searches_col.delete_many({"user_id": user_id})
 
