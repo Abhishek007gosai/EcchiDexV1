@@ -7,55 +7,8 @@
   <title>{{ brand_name }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    /* Skeleton loader — shown before JS hydrates the page */
-    #skeleton-loader {
-      position: fixed; inset: 0; z-index: 100;
-      background: #131310;
-      display: flex; flex-direction: column; gap: 20px;
-      padding: 16px; max-width: 480px; margin: 0 auto;
-      transition: opacity .2s ease;
-    }
-    #skeleton-loader.hidden { opacity: 0; pointer-events: none; }
-    .sk-block { background: #1c1c17; border-radius: 12px; }
-    .sk-header { height: 44px; width: 100%; }
-    .sk-pills { height: 40px; width: 60%; border-radius: 999px; }
-    .sk-row-label { height: 18px; width: 35%; margin-bottom: 8px; }
-    .sk-scroll { display: flex; gap: 12px; }
-    .sk-card { width: 132px; height: 220px; border-radius: 12px; flex: none; }
-    .sk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .sk-grid-item { height: 220px; border-radius: 12px; }
-    @keyframes sk-pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: .45; }
-    }
-    .sk-block { animation: sk-pulse 1.4s ease-in-out infinite; }
-  </style>
 </head>
 <body data-brand="{{ brand_name }}">
-  <div id="skeleton-loader">
-    <div class="sk-block sk-header"></div>
-    <div class="sk-block sk-pills"></div>
-    <div class="sk-block sk-row-label"></div>
-    <div class="sk-scroll">
-      <div class="sk-block sk-card"></div>
-      <div class="sk-block sk-card"></div>
-      <div class="sk-block sk-card"></div>
-    </div>
-    <div class="sk-block sk-row-label"></div>
-    <div class="sk-scroll">
-      <div class="sk-block sk-card"></div>
-      <div class="sk-block sk-card"></div>
-      <div class="sk-block sk-card"></div>
-    </div>
-    <div class="sk-block sk-row-label"></div>
-    <div class="sk-grid">
-      <div class="sk-block sk-grid-item"></div>
-      <div class="sk-block sk-grid-item"></div>
-      <div class="sk-block sk-grid-item"></div>
-      <div class="sk-block sk-grid-item"></div>
-    </div>
-  </div>
 
   <!-- ===================== Home view ===================== -->
   <main id="app-view">
@@ -68,13 +21,18 @@
             <span class="brand-handle">{{ brand_handle }}</span>
           </div>
         </div>
-        <div class="identity-right">
-          <button class="icon-btn" id="notif-btn" aria-label="Notifications">
-            &#128276;
-            <span id="notif-badge" class="notif-badge hidden"></span>
-          </button>
-          <button class="icon-btn" id="header-search-btn" aria-label="Search">&#128269;</button>
+      </div>
+
+      <div class="header-search-row">
+        <div class="search-row header-search-wrap">
+          <span class="search-icon-left">&#128269;</span>
+          <input id="search-input" class="search-input" type="text" placeholder="Search anime..." autocomplete="off" readonly />
         </div>
+        <button class="icon-btn" id="notif-btn" aria-label="Notifications">
+          &#128276;
+          <span id="notif-badge" class="notif-badge hidden"></span>
+        </button>
+        <button class="icon-btn" id="profile-btn" aria-label="Profile">&#128100;</button>
       </div>
 
       <div class="pill-tabs">
@@ -273,12 +231,5 @@
   <div id="toast" class="toast hidden"></div>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
-  <script>
-    (function() {
-      var sk = document.getElementById('skeleton-loader');
-      if (sk) sk.classList.add('hidden');
-    })();
-  </script>
 </body>
-  </html>
-  
+</html>
