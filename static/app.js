@@ -104,7 +104,6 @@
   const profileView = el("profile-view");
   const allViews = { app: appView, search: searchView, genre: genreView, profile: profileView };
 
-  const homeSearchInput = el("search-input");
   const searchViewInput = el("search-view-input");
   const searchResults = el("search-results");
   const searchResultsGroups = el("search-results-groups");
@@ -151,6 +150,7 @@
   const linkOverlay = el("link-overlay");
   const linkInput = el("link-input");
 
+  const headerSearchBtn = el("header-search-btn");
   const profileBtn = el("profile-btn");
   const notifBtn = el("notif-btn");
   const notifBadge = el("notif-badge");
@@ -265,12 +265,14 @@
   }
   renderHeaderAvatar();
 
-  // Home's own search bar is a shortcut into the dedicated Search page.
-  homeSearchInput.addEventListener("click", () => {
-    showView("search");
-    renderSearchLanding();
-    setTimeout(() => searchViewInput.focus(), 50);
-  });
+  // Header search icon is a shortcut into the dedicated Search page.
+  if (headerSearchBtn) {
+    headerSearchBtn.addEventListener("click", () => {
+      showView("search");
+      renderSearchLanding();
+      setTimeout(() => searchViewInput.focus(), 50);
+    });
+  }
 
   document.querySelectorAll("[data-back]").forEach((btn) => {
     btn.addEventListener("click", () => {
