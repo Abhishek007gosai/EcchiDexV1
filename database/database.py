@@ -820,20 +820,28 @@ def get_profile_help() -> dict:
     text = (doc.get("text") or "").strip() or (
         "Notifications, requests, and channel links are all managed through the bot."
     )
+    support = (doc.get("support_chat_url") or "").strip()
     return {
         "title": title,
         "text": text,
         "links": get_profile_links(),
         "more_links": get_more_channel_links(),
+        "support_chat_url": support,
     }
 
 
-def set_profile_help(title: str | None = None, text: str | None = None) -> dict:
+def set_profile_help(
+    title: str | None = None,
+    text: str | None = None,
+    support_chat_url: str | None = None,
+) -> dict:
     fields = {}
     if title is not None:
         fields["title"] = (title or "").strip() or None
     if text is not None:
         fields["text"] = (text or "").strip() or None
+    if support_chat_url is not None:
+        fields["support_chat_url"] = (support_chat_url or "").strip() or None
     if fields:
         fields["updated_at"] = time.time()
         counters_col.update_one({"_id": "profile_help"}, {"$set": fields}, upsert=True)
