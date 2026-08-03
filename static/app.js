@@ -119,19 +119,31 @@
   const genreViewTitle = el("genre-view-title");
 
   const pillTabs = document.querySelectorAll(".pill-tab[data-tab]");
+  const subPillTabs = document.querySelectorAll(".pill-tab[data-subtab]");
   const tabAll = el("tab-all");
-  const tabLibrary = el("tab-library");
+  const tabAvailable = el("tab-available");
+  const subtabHanime = el("subtab-hanime");
+  const subtabHmanhwa = el("subtab-hmanhwa");
 
   const scrollArea = el("scroll-area");
-  const trendingRow = el("trending-row");
-  const topAiringList = el("top-airing-list");
-  const popularLoadMore = el("popular-load-more");
-  const popularGridList = el("popular-grid-list");
-  const popularGridLoadMoreBtn = el("popular-grid-load-more");
 
-  const letterBar = el("letter-bar");
-  const availableGroups = el("available-groups");
-  const availableEmpty = el("available-empty");
+  // ALL tab dual feeds
+  const allTrendingHentai = el("all-trending-hentai");
+  const allTrendingManga = el("all-trending-manga");
+  const allAiringHentai = el("all-airing-hentai");
+  const allAiringManga = el("all-airing-manga");
+  const allPopularHentai = el("all-popular-hentai");
+  const allPopularManga = el("all-popular-manga");
+  const allPopularHentaiMore = el("all-popular-hentai-more");
+  const allPopularMangaMore = el("all-popular-manga-more");
+
+  // A–Z libraries
+  const hanimeLetterBar = el("hanime-letter-bar");
+  const hanimeGroups = el("hanime-groups");
+  const hanimeEmpty = el("hanime-empty");
+  const hmanhwaLetterBar = el("hmanhwa-letter-bar");
+  const hmanhwaGroups = el("hmanhwa-groups");
+  const hmanhwaEmpty = el("hmanhwa-empty");
 
   const navBtns = document.querySelectorAll(".nav-btn");
 
@@ -178,18 +190,34 @@
   // ---------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------
-  let trending = [];
-  let popular = [];
-  let popularPage = 1;
-  let popularHasNext = false;
-  let mostPopular = [];
-  let mostPopularPage = 1;
-  let mostPopularHasNext = false;
-  let mostPopularLoading = false;
   let available = [];
-  let activeLetter = null;
-  let libraryQuery = "";
   let profile = null;
+
+  // ALL — hentai feeds
+  let hTrending = [];
+  let hAiring = [];
+  let hAiringPage = 1;
+  let hAiringHasNext = false;
+  let hPopular = [];
+  let hPopularPage = 1;
+  let hPopularHasNext = false;
+  let hPopularLoading = false;
+
+  // ALL — manga/manhwa feeds
+  let mTrending = [];
+  let mAiring = [];
+  let mAiringPage = 1;
+  let mAiringHasNext = false;
+  let mPopular = [];
+  let mPopularPage = 1;
+  let mPopularHasNext = false;
+  let mPopularLoading = false;
+
+  // A–Z library filters
+  let libraryQuery = "";
+  let availableSub = "hanime"; // hanime | hmanhwa
+  let hanimeLetter = null;
+  let hmanhwaLetter = null;
 
   const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
   // "#" comes first, same convention as Spotify/Apple Music/contacts apps,
@@ -372,135 +400,172 @@
   }
 
   // ---------------------------------------------------------------------
-  // Render: Home "All" tab — Trending, Top Airing (+ Load more)
-  // ---------------------------------------------------------------------
-
-  // Shimmer placeholders shown the instant the Home tab opens, replaced as
-  // soon as each section's real data arrives — makes first load (and any
-  // cold-start delay while the server/cache spins back up) feel immediate
-  // instead of showing blank space under each header.
-  function renderSkeletonRow(container, count) {
-    if (!container) return;
-    container.innerHTML = "";
-    for (let i = 0; i < count; i++) {
-      const card = document.createElement("div");
-      card.className = "skeleton-card";
-      container.appendChild(card);
-    }
-  }
-
-  function renderTrending() {
-    trendingRow.innerHTML = "";
-    const availIndex = buildAvailableIndex();
-    trending.forEach((item) => {
-      const matched = availIndex.match(item);
-      item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-      trendingRow.appendChild(trendingCard(item, () => openDiscoverDetail(item)));
-    });
-  }
-
-  function renderTopAiring() {
-    topAiringList.innerHTML = "";
-    const availIndex = buildAvailableIndex();
-    popular.forEach((item) => {
-      const matched = availIndex.match(item);
-      item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-      topAiringList.appendChild(topAiringCard(item, () => openDiscoverDetail(item)));
-    });
-  }
-
-  let popularLoading = false;
-  async function loadMorePopular() {
-    if (popularLoading || !popularHasNext) return;
-    popularLoading = true;
-    popularLoadMore.classList.remove("hidden");
-    try {
-      const data = await api(`/api/catalog/popular?page=${popularPage + 1}`);
-      popularPage += 1;
-      popular = popular.concat(data.results);
-      popularHasNext = data.has_next;
-      renderTopAiring();
-    } catch (err) {
-      showToast("Couldn't load more right now.");
-    }
-    popularLoadMore.classList.add("hidden");
-    popularLoading = false;
-  }
-
-  // Auto-load more Popular anime as the Home tab is scrolled, instead of
-  // making the user tap a button.
-  scrollArea.addEventListener("scroll", debounce(() => {
-    if (tabAll.classList.contains("hidden")) return;
-    const nearBottom = scrollArea.scrollTop + scrollArea.clientHeight > scrollArea.scrollHeight - 400;
-    if (nearBottom) loadMorePopular();
-  }, 150));
-
-  function renderPopularGrid() {
-    popularGridList.innerHTML = "";
-    const availIndex = buildAvailableIndex();
-    mostPopular.forEach((item) => {
-      const matched = availIndex.match(item);
-      item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-      popularGridList.appendChild(popularGridCard(item, () => openDiscoverDetail(item)));
-    });
-    popularGridLoadMoreBtn.classList.toggle("hidden", !mostPopularHasNext);
-  }
-
-  async function loadMorePopularGrid() {
-    if (mostPopularLoading || !mostPopularHasNext) return;
-    mostPopularLoading = true;
-    popularGridLoadMoreBtn.disabled = true;
-    popularGridLoadMoreBtn.textContent = "Loading…";
-    try {
-      const data = await api(`/api/catalog/most-popular?page=${mostPopularPage + 1}`);
-      mostPopularPage += 1;
-      mostPopular = mostPopular.concat(data.results);
-      mostPopularHasNext = data.has_next;
-      renderPopularGrid();
-    } catch (err) {
-      showToast("Couldn't load more right now.");
-    }
-    popularGridLoadMoreBtn.disabled = false;
-    popularGridLoadMoreBtn.textContent = "Load more";
-    mostPopularLoading = false;
-  }
-
-  popularGridLoadMoreBtn.addEventListener("click", loadMorePopularGrid);
-
-  // ---------------------------------------------------------------------
-  // Pill tabs: All (discovery) / Available (posted library)
+  // Pill tabs: ALL (discovery) / HANIME (A–Z) / HMANHWA (A–Z)
   // ---------------------------------------------------------------------
   function setPillTab(tab) {
     pillTabs.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-    tabAll.classList.toggle("hidden", tab !== "all");
-    tabLibrary.classList.toggle("hidden", tab !== "library");
-    if (tab === "library") renderLibraryTab();
+    if (tabAll) tabAll.classList.toggle("hidden", tab !== "all");
+    if (tabAvailable) tabAvailable.classList.toggle("hidden", tab !== "available");
+    if (tab === "available") setAvailableSub(availableSub);
   }
   pillTabs.forEach((b) => b.addEventListener("click", () => setPillTab(b.dataset.tab)));
 
+  function setAvailableSub(sub) {
+    availableSub = sub;
+    subPillTabs.forEach((b) => b.classList.toggle("active", b.dataset.subtab === sub));
+    if (subtabHanime) subtabHanime.classList.toggle("hidden", sub !== "hanime");
+    if (subtabHmanhwa) subtabHmanhwa.classList.toggle("hidden", sub !== "hmanhwa");
+    if (sub === "hanime") renderTypeLibrary("ANIME");
+    if (sub === "hmanhwa") renderTypeLibrary("MANGA");
+  }
+  subPillTabs.forEach((b) => b.addEventListener("click", () => setAvailableSub(b.dataset.subtab)));
+
   // ---------------------------------------------------------------------
-  // Render: Available/library tab (posted catalog, A–Z)
+  // ALL tab — dual feeds (hentai vs manga/manhwa shown separately)
   // ---------------------------------------------------------------------
-  function primaryAvailableList() {
-    // A franchise with many posted seasons/OVAs/movies would otherwise
-    // fill the Available grid with one row per title. Instead, group them
-    // by walking each title's relations (already on every available[]
-    // item) and show only one representative per franchise — the
-    // latest-released entry, e.g. the newest season — with the rest
-    // reachable via the Prequel/Sequel cards inside that title's detail
-    // view.
+  function fillHscroll(container, items, cardFn) {
+    if (!container) return;
+    container.innerHTML = "";
+    const availIndex = buildAvailableIndex();
+    items.forEach((item) => {
+      const matched = availIndex.match(item);
+      item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
+      container.appendChild(cardFn(item, () => openDiscoverDetail(item)));
+    });
+  }
+
+  function fillGrid(container, items) {
+    if (!container) return;
+    container.innerHTML = "";
+    const availIndex = buildAvailableIndex();
+    items.forEach((item) => {
+      const matched = availIndex.match(item);
+      item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
+      container.appendChild(popularGridCard(item, () => openDiscoverDetail(item)));
+    });
+  }
+
+  function renderAllTab() {
+    fillHscroll(allTrendingHentai, hTrending, trendingCard);
+    fillHscroll(allTrendingManga, mTrending, trendingCard);
+    fillHscroll(allAiringHentai, hAiring, topAiringCard);
+    fillHscroll(allAiringManga, mAiring, topAiringCard);
+    fillGrid(allPopularHentai, hPopular);
+    fillGrid(allPopularManga, mPopular);
+    if (allPopularHentaiMore) allPopularHentaiMore.classList.toggle("hidden", !hPopularHasNext);
+    if (allPopularMangaMore) allPopularMangaMore.classList.toggle("hidden", !mPopularHasNext);
+  }
+
+  async function loadMoreHentaiPopular() {
+    if (hPopularLoading || !hPopularHasNext) return;
+    hPopularLoading = true;
+    if (allPopularHentaiMore) {
+      allPopularHentaiMore.disabled = true;
+      allPopularHentaiMore.textContent = "Loading…";
+    }
+    try {
+      const data = await api(`/api/catalog/most-popular?page=${hPopularPage + 1}`);
+      hPopularPage += 1;
+      hPopular = hPopular.concat(data.results || []);
+      hPopularHasNext = !!data.has_next;
+      fillGrid(allPopularHentai, hPopular);
+    } catch (err) {
+      showToast("Couldn't load more right now.");
+    }
+    if (allPopularHentaiMore) {
+      allPopularHentaiMore.disabled = false;
+      allPopularHentaiMore.textContent = "Load more hentai";
+      allPopularHentaiMore.classList.toggle("hidden", !hPopularHasNext);
+    }
+    hPopularLoading = false;
+  }
+
+  async function loadMoreMangaPopular() {
+    if (mPopularLoading || !mPopularHasNext) return;
+    mPopularLoading = true;
+    if (allPopularMangaMore) {
+      allPopularMangaMore.disabled = true;
+      allPopularMangaMore.textContent = "Loading…";
+    }
+    try {
+      const data = await api(`/api/catalog/manga/popular?page=${mPopularPage + 1}`);
+      mPopularPage += 1;
+      mPopular = mPopular.concat(data.results || []);
+      mPopularHasNext = !!data.has_next;
+      fillGrid(allPopularManga, mPopular);
+    } catch (err) {
+      showToast("Couldn't load more right now.");
+    }
+    if (allPopularMangaMore) {
+      allPopularMangaMore.disabled = false;
+      allPopularMangaMore.textContent = "Load more manga";
+      allPopularMangaMore.classList.toggle("hidden", !mPopularHasNext);
+    }
+    mPopularLoading = false;
+  }
+
+  if (allPopularHentaiMore) allPopularHentaiMore.addEventListener("click", loadMoreHentaiPopular);
+  if (allPopularMangaMore) allPopularMangaMore.addEventListener("click", loadMoreMangaPopular);
+
+  async function loadAllDiscover() {
+    renderSkeletonRow(allTrendingHentai, 4);
+    renderSkeletonRow(allTrendingManga, 4);
+    renderSkeletonRow(allAiringHentai, 4);
+    renderSkeletonRow(allAiringManga, 4);
+    renderSkeletonRow(allPopularHentai, 4);
+    renderSkeletonRow(allPopularManga, 4);
+    try {
+      const [ht, ha, hp, mt, ma, mp] = await Promise.all([
+        api("/api/catalog/trending"),
+        api("/api/catalog/popular"),
+        api("/api/catalog/most-popular"),
+        api("/api/catalog/manga/trending"),
+        api("/api/catalog/manga/airing"),
+        api("/api/catalog/manga/popular"),
+      ]);
+      hTrending = ht.results || [];
+      hAiring = ha.results || [];
+      hAiringHasNext = !!ha.has_next;
+      hAiringPage = 1;
+      hPopular = hp.results || [];
+      hPopularHasNext = !!hp.has_next;
+      hPopularPage = 1;
+      mTrending = mt.results || [];
+      mAiring = ma.results || [];
+      mAiringHasNext = !!ma.has_next;
+      mAiringPage = 1;
+      mPopular = mp.results || [];
+      mPopularHasNext = !!mp.has_next;
+      mPopularPage = 1;
+    } catch (err) {
+      hTrending = []; hAiring = []; hPopular = [];
+      mTrending = []; mAiring = []; mPopular = [];
+      hPopularHasNext = mPopularHasNext = false;
+    }
+    renderAllTab();
+  }
+
+  // ---------------------------------------------------------------------
+  // HANIME / HMANHWA A–Z libraries (posted titles with join links)
+  // ---------------------------------------------------------------------
+  function isMediaType(item, type) {
+    const t = (item.media_type || "ANIME").toUpperCase();
+    if (type === "ANIME") return t === "ANIME";
+    return t === "MANGA";
+  }
+
+  function primaryListForType(type) {
+    // Franchise collapse within the same media type only
+    const pool = available.filter((a) => isMediaType(a, type));
     const bySourceId = new Map();
-    available.forEach((a) => {
+    pool.forEach((a) => {
       if (a.source === "anilist" && a.source_id != null) bySourceId.set(String(a.source_id), a);
     });
-
     const visited = new Set();
     const primaries = [];
-
-    available.forEach((start) => {
+    pool.forEach((start) => {
       const startKey = String(start.id);
       if (visited.has(startKey)) return;
-
       const group = [];
       const frontier = [start];
       const localSeen = new Set([startKey]);
@@ -516,57 +581,56 @@
         });
       }
       group.forEach((g) => visited.add(String(g.id)));
-
       group.sort((x, y) => (y.year || 0) - (x.year || 0) || y.id - x.id);
       primaries.push(group[0]);
     });
-
     return primaries;
   }
 
-  function lettersWithData() {
-    return new Set(primaryAvailableList().map((a) => indexKeyFor(a.title)));
-  }
-
-  function filteredLibrary() {
-    let list = primaryAvailableList();
-    if (libraryQuery.trim()) {
-      list = list.filter((a) => matchesLibraryQuery(a.title));
-    } else if (activeLetter) {
-      list = list.filter((a) => indexKeyFor(a.title) === activeLetter);
-    }
-    return [...list].sort((a, b) => a.title.localeCompare(b.title));
-  }
-
-  function renderLetterBar() {
-    letterBar.innerHTML = "";
-    const has = lettersWithData();
+  function renderLetterBarFor(type, letterBarEl, activeLetter, setLetter) {
+    if (!letterBarEl) return;
+    letterBarEl.innerHTML = "";
+    const has = new Set(primaryListForType(type).map((a) => indexKeyFor(a.title)));
     INDEX_KEYS.forEach((l) => {
       const btn = document.createElement("button");
       btn.className = "letter-btn" + (activeLetter === l ? " active" : "");
       btn.textContent = l;
       btn.disabled = !has.has(l);
       btn.addEventListener("click", () => {
-        libraryQuery = "";
-        activeLetter = activeLetter === l ? null : l;
-        renderLibraryTab();
+        setLetter(activeLetter === l ? null : l);
+        renderTypeLibrary(type);
       });
-      letterBar.appendChild(btn);
+      letterBarEl.appendChild(btn);
     });
   }
 
-  function renderLibraryTab() {
-    renderLetterBar();
-    availableGroups.innerHTML = "";
-    const list = filteredLibrary();
-    availableEmpty.classList.toggle("hidden", list.length !== 0);
+  function renderTypeLibrary(type) {
+    const isAnime = type === "ANIME";
+    const letterBarEl = isAnime ? hanimeLetterBar : hmanhwaLetterBar;
+    const groupsEl = isAnime ? hanimeGroups : hmanhwaGroups;
+    const emptyEl = isAnime ? hanimeEmpty : hmanhwaEmpty;
+    let activeLetter = isAnime ? hanimeLetter : hmanhwaLetter;
+    const setLetter = (v) => {
+      if (isAnime) hanimeLetter = v;
+      else hmanhwaLetter = v;
+      activeLetter = v;
+    };
+
+    renderLetterBarFor(type, letterBarEl, activeLetter, setLetter);
+    if (!groupsEl) return;
+    groupsEl.innerHTML = "";
+
+    let list = primaryListForType(type);
+    if (activeLetter) list = list.filter((a) => indexKeyFor(a.title) === activeLetter);
+    list = [...list].sort((a, b) => a.title.localeCompare(b.title));
+
+    if (emptyEl) emptyEl.classList.toggle("hidden", list.length !== 0);
 
     const groups = {};
     list.forEach((a) => {
       const l = indexKeyFor(a.title);
       (groups[l] = groups[l] || []).push(a);
     });
-
     Object.keys(groups).sort().forEach((letter) => {
       const wrap = document.createElement("div");
       wrap.className = "letter-group";
@@ -580,7 +644,7 @@
         grid.appendChild(simplePosterCard(item, () => openLocalDetail(item)));
       });
       wrap.appendChild(grid);
-      availableGroups.appendChild(wrap);
+      groupsEl.appendChild(wrap);
     });
   }
 
@@ -1212,19 +1276,29 @@
     const myToken = ++searchToken;
     searchLoading = true;
     try {
-      const data = await api(`/api/search/anime?q=${encodeURIComponent(query)}&page=1`);
+      const [animeData, mangaData] = await Promise.all([
+        api(`/api/search/anime?q=${encodeURIComponent(query)}&page=1`),
+        api(`/api/search/manga?q=${encodeURIComponent(query)}&page=1`),
+      ]);
       if (myToken !== searchToken) return; // a newer search superseded this one
-      searchHasNext = data.has_next;
+      searchHasNext = !!(animeData.has_next || mangaData.has_next);
       const localTitles = new Set(localMatches.map((a) => a.title.toLowerCase()));
-      data.results.forEach((item) => {
-        if (localTitles.has(item.title.toLowerCase())) return; // already shown above
-        const matched = availIndex.match(item);
-        item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-        searchResultsGroups.appendChild(searchResultRow(item, () => {
-          trackConfirmedSearch(item.title);
-          openDiscoverDetail(item);
-        }));
-      });
+      const seen = new Set(localTitles);
+      const merge = (data) => {
+        (data.results || []).forEach((item) => {
+          const key = (item.title || "").toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          const matched = availIndex.match(item);
+          item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
+          searchResultsGroups.appendChild(searchResultRow(item, () => {
+            trackConfirmedSearch(item.title);
+            openDiscoverDetail(item);
+          }));
+        });
+      };
+      merge(animeData);
+      merge(mangaData);
       searchResultsEmpty.classList.toggle("hidden", searchResultsGroups.children.length !== 0);
     } catch (err) {
       searchResultsEmpty.classList.toggle("hidden", searchResultsGroups.children.length !== 0);
@@ -1449,46 +1523,17 @@
   // ---------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------
-  async function loadDiscover() {
-    renderSkeletonRow(trendingRow, 4);
-    renderSkeletonRow(topAiringList, 4);
-    renderSkeletonRow(popularGridList, 6);
-    try {
-      const [trendingData, popularData, mostPopularData] = await Promise.all([
-        api("/api/catalog/trending"),
-        api("/api/catalog/popular"),
-        api("/api/catalog/most-popular"),
-      ]);
-      trending = trendingData.results;
-      popular = popularData.results;
-      popularHasNext = popularData.has_next;
-      popularPage = 1;
-      mostPopular = mostPopularData.results;
-      mostPopularHasNext = mostPopularData.has_next;
-      mostPopularPage = 1;
-    } catch (err) {
-      trending = [];
-      popular = [];
-      popularHasNext = false;
-      mostPopular = [];
-      mostPopularHasNext = false;
-    }
-    renderTrending();
-    renderTopAiring();
-    renderPopularGrid();
-  }
-
   async function loadAvailable() {
     try {
       available = await api("/api/catalog/available");
     } catch (err) {
       available = [];
     }
-    if (!tabLibrary.classList.contains("hidden")) renderLibraryTab();
-    if (!tabAll.classList.contains("hidden")) {
-      renderTrending();
-      renderTopAiring();
-      renderPopularGrid();
+    // Refresh join-link badges on ALL + rebuild A–Z lists if Available is open
+    if (tabAll && !tabAll.classList.contains("hidden")) renderAllTab();
+    if (tabAvailable && !tabAvailable.classList.contains("hidden")) {
+      if (availableSub === "hanime") renderTypeLibrary("ANIME");
+      else renderTypeLibrary("MANGA");
     }
   }
 
@@ -1522,7 +1567,7 @@
 
   (async function init() {
     document.title = brandName;
-    await Promise.all([loadDiscover(), loadAvailable(), preloadProfile(), loadNotifications()]);
+    await Promise.all([loadAllDiscover(), loadAvailable(), preloadProfile(), loadNotifications()]);
     applyDeepLink();
   })();
 

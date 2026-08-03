@@ -1223,3 +1223,18 @@ html, body {
   max-width: 85vw;
   text-align: center;
 }
+
+
+/* Dual-type subsection labels under ALL tab sections */
+.sub-section-label {
+  margin: 4px 0 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.sub-pill-tabs {
+  margin-bottom: 16px;
+}
