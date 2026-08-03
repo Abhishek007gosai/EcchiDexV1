@@ -202,6 +202,12 @@ class AniListSource(AnimeSource):
 
     def __init__(self):
         self._cache: dict[str, tuple[float, dict]] = {}
+        self._session = requests.Session()
+        self._session.headers.update({
+            "User-Agent": "HIndexBot/1.0 (catalog)",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        })
 
     def _post(self, query: str, variables: dict) -> dict:
         # AniList's public API rate-limits aggressively. When several
@@ -211,10 +217,10 @@ class AniListSource(AnimeSource):
         # what's really just "try again in a moment".
         last_exc = None
         for attempt in range(3):
-            resp = requests.post(
+            resp = self._session.post(
                 Config.ANILIST_ENDPOINT,
                 json={"query": query, "variables": variables},
-                timeout=10,
+                timeout=12,
             )
             if resp.status_code == 429:
                 last_exc = requests.HTTPError(f"429 rate limited (attempt {attempt + 1})", response=resp)
@@ -347,6 +353,9 @@ class AniListSource(AnimeSource):
                     "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
                     "rating": round(score / 10, 1) if score else None,
                     "anilist_id": m["id"],
+                    "source": self.name,
+                    "source_id": m["id"],
+                    "media_type": "ANIME",
                     "genres": (m.get("genres") or [])[:3],
                     "episodes": m.get("episodes"),
                     "synopsis": _clean_description(m.get("description"))[:140],
@@ -385,6 +394,9 @@ class AniListSource(AnimeSource):
                     "countryOfOrigin": m.get("countryOfOrigin"),
                     "media_type": "MANGA",
                     "synopsis": _clean_description(m.get("description"))[:140],
+                    "source": self.name,
+                    "source_id": m["id"],
+                    "media_type": "ANIME",
                 })
             return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
         return self._cached(f"{cache_prefix}{sort}:{page}", fetch)
