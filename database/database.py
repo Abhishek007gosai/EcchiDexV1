@@ -60,6 +60,7 @@ def _to_anime(doc) -> dict | None:
     d["id"] = d.pop("_id")
     d["genres"] = d.get("genres") or []
     d["available"] = bool(d.get("join_link"))
+    d["media_type"] = d.get("media_type") or "ANIME"
     return d
 
 
@@ -192,8 +193,11 @@ def upsert_anime(details: dict, added_by: int | None = None) -> int:
         "rating": details.get("rating"),
         "status": details.get("status"),
         "episodes": details.get("episodes"),
+        "chapters": details.get("chapters"),
         "format": details.get("format"),
         "duration": details.get("duration"),
+        "media_type": details.get("media_type") or "ANIME",
+        "countryOfOrigin": details.get("countryOfOrigin"),
         "related_ids": related_ids,
         "relations": details.get("relations", []),
         "updated_at": now,
