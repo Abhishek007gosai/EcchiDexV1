@@ -10,6 +10,10 @@ import requests
 from config import Config
 from plugins.base import AnimeSource
 
+def _cache_ttl(name: str, default: int) -> int:
+    return int(getattr(Config, name, default))
+
+
 SEARCH_QUERY = """
 query ($search: String, $page: Int) {
   Page(page: $page, perPage: 15) {
@@ -235,27 +239,50 @@ class AniListSource(AnimeSource):
         })
 
     def _post(self, query: str, variables: dict) -> dict:
-        # AniList's public API rate-limits aggressively. When several
-        # requests land in the same burst (e.g. fetching all genre
-        # thumbnails in parallel), a few commonly come back 429. Retry
-        # those with a short backoff instead of surfacing a failure for
-        # what's really just "try again in a moment".
+        # AniList rate-limits aggressively. Retry 429s; also tolerate
+        # GraphQL error payloads so one bad variable never 500s the app.
         last_exc = None
         for attempt in range(3):
-            resp = self._session.post(
-                Config.ANILIST_ENDPOINT,
-                json={"query": query, "variables": variables},
-                timeout=12,
-            )
+            try:
+                resp = self._session.post(
+                    Config.ANILIST_ENDPOINT,
+                    json={"query": query, "variables": variables},
+                    timeout=15,
+                )
+            except requests.RequestException as e:
+                last_exc = e
+                time.sleep(0.5 * (attempt + 1))
+                continue
             if resp.status_code == 429:
-                last_exc = requests.HTTPError(f"429 rate limited (attempt {attempt + 1})", response=resp)
+                last_exc = requests.HTTPError(
+                    f"429 rate limited (attempt {attempt + 1})", response=resp
+                )
                 retry_after = resp.headers.get("Retry-After")
-                delay = float(retry_after) if retry_after else 0.6 * (attempt + 1)
+                delay = float(retry_after) if retry_after else 0.8 * (attempt + 1)
                 time.sleep(delay)
                 continue
-            resp.raise_for_status()
-            return resp.json()["data"]
-        raise last_exc
+            if resp.status_code >= 400:
+                last_exc = requests.HTTPError(
+                    f"AniList HTTP {resp.status_code}", response=resp
+                )
+                time.sleep(0.4 * (attempt + 1))
+                continue
+            try:
+                body = resp.json()
+            except ValueError as e:
+                last_exc = e
+                continue
+            if body.get("errors") and not body.get("data"):
+                last_exc = requests.HTTPError(
+                    f"AniList GraphQL error: {body['errors'][0].get('message', 'unknown')}"
+                )
+                break
+            data = body.get("data")
+            if data is None:
+                last_exc = requests.HTTPError("AniList returned empty data")
+                break
+            return data
+        raise last_exc if last_exc else requests.HTTPError("AniList request failed")
 
     def search(self, query: str, page: int = 1) -> dict:
         data = self._post(SEARCH_QUERY, {"search": query, "page": page})
@@ -281,7 +308,7 @@ class AniListSource(AnimeSource):
             return self._cached(
                 f"details:{source_id}",
                 lambda: self._fetch_details(source_id),
-                ttl=Config.CATALOG_CACHE_TTL_DETAILS,
+                ttl=_cache_ttl("CATALOG_CACHE_TTL_DETAILS", 7200),
             )
         return self._fetch_details(source_id)
 
@@ -396,14 +423,14 @@ class AniListSource(AnimeSource):
         return self._cached(f"{cache_prefix}{sort}:{page}", fetch, ttl=ttl)
 
     def get_trending(self, page: int = 1) -> dict:
-        return self._discover("TRENDING_DESC", page, ttl=Config.CATALOG_CACHE_TTL_TRENDING)
+        return self._discover("TRENDING_DESC", page, ttl=_cache_ttl("CATALOG_CACHE_TTL_TRENDING", 600))
 
     def get_popular(self, page: int = 1) -> dict:
         # Backs the "Top Airing" section — must only include anime that is
         # currently releasing, not just anime that is popular overall.
         return self._discover(
             "POPULARITY_DESC", page, query=DISCOVER_AIRING_QUERY,
-            cache_prefix="airing:", ttl=Config.CATALOG_CACHE_TTL_AIRING,
+            cache_prefix="airing:", ttl=_cache_ttl("CATALOG_CACHE_TTL_AIRING", 900),
         )
 
     def get_most_popular(self, page: int = 1) -> dict:
@@ -411,7 +438,7 @@ class AniListSource(AnimeSource):
         # regardless of airing status (unlike get_popular/"Top Airing").
         return self._discover(
             "POPULARITY_DESC", page, cache_prefix="popular-all:",
-            ttl=Config.CATALOG_CACHE_TTL_POPULAR,
+            ttl=_cache_ttl("CATALOG_CACHE_TTL_POPULAR", 3600),
         )
 
     def _discover_manga(self, sort: str, page: int = 1, query: str = MANGA_DISCOVER_QUERY, cache_prefix: str = "manga:", ttl: int | None = None) -> dict:
@@ -460,22 +487,22 @@ class AniListSource(AnimeSource):
         def fetch():
             general = self._discover_manga(
                 "TRENDING_DESC", page, query=MANGA_DISCOVER_QUERY,
-                cache_prefix="m-trend-v3:", ttl=Config.CATALOG_CACHE_TTL_TRENDING,
+                cache_prefix="m-trend-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_TRENDING", 600),
             )
             manhwa = self._discover_manga(
                 "TRENDING_DESC", page, query=MANHWA_DISCOVER_QUERY,
-                cache_prefix="m-trend-kr-v3:", ttl=Config.CATALOG_CACHE_TTL_TRENDING,
+                cache_prefix="m-trend-kr-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_TRENDING", 600),
             )
             return self._merge_manga_pages(manhwa, general)
         return self._cached(
-            f"manga-trend-merged-v3:{page}", fetch, ttl=Config.CATALOG_CACHE_TTL_TRENDING
+            f"manga-trend-merged-v3:{page}", fetch, ttl=_cache_ttl("CATALOG_CACHE_TTL_TRENDING", 600)
         )
 
     def get_airing_manga(self, page: int = 1) -> dict:
         """Ongoing adult manga / manhwa / doujin — Top Airing row."""
         return self._discover_manga(
             "POPULARITY_DESC", page, query=MANGA_AIRING_QUERY,
-            cache_prefix="m-air-v3:", ttl=Config.CATALOG_CACHE_TTL_AIRING,
+            cache_prefix="m-air-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_AIRING", 900),
         )
 
     def get_popular_manga(self, page: int = 1) -> dict:
@@ -483,15 +510,15 @@ class AniListSource(AnimeSource):
         def fetch():
             general = self._discover_manga(
                 "POPULARITY_DESC", page, query=MANGA_DISCOVER_QUERY,
-                cache_prefix="m-pop-v3:", ttl=Config.CATALOG_CACHE_TTL_POPULAR,
+                cache_prefix="m-pop-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_POPULAR", 3600),
             )
             manhwa = self._discover_manga(
                 "POPULARITY_DESC", page, query=MANHWA_DISCOVER_QUERY,
-                cache_prefix="m-pop-kr-v3:", ttl=Config.CATALOG_CACHE_TTL_POPULAR,
+                cache_prefix="m-pop-kr-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_POPULAR", 3600),
             )
             return self._merge_manga_pages(manhwa, general)
         return self._cached(
-            f"manga-pop-merged-v3:{page}", fetch, ttl=Config.CATALOG_CACHE_TTL_POPULAR
+            f"manga-pop-merged-v3:{page}", fetch, ttl=_cache_ttl("CATALOG_CACHE_TTL_POPULAR", 3600)
         )
 
     # Back-compat aliases used by older routes
@@ -545,5 +572,5 @@ class AniListSource(AnimeSource):
         return self._cached(
             f"genre:{media_type}:{genre}:{page}",
             fetch,
-            ttl=Config.CATALOG_CACHE_TTL_GENRE,
+            ttl=_cache_ttl("CATALOG_CACHE_TTL_GENRE", 1800),
         )
