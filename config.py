@@ -26,7 +26,7 @@ class Config:
     BANNER_IMAGE_URL = os.environ.get("BANNER_IMAGE_URL", "")
     # Support chat link shown as a button under Access on the Profile page
     # (e.g. https://t.me/your_support_bot or https://t.me/username)
-    SUPPORT_CHAT_URL = os.environ.get("SUPPORT_CHAT_URL", "").strip()
+    SUPPORT_CHAT_URL = os.environ.get("SUPPORT_CHAT_URL", "https://t.me/EternalsHelplineBot").strip()
 
     # /anidex welcome message. Supports {first_name} and {brand_name}
     # placeholders, filled in when the command runs. Uses Telegram
