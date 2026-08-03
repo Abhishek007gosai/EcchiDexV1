@@ -10,8 +10,6 @@ import requests
 from config import Config
 from plugins.base import AnimeSource
 
-def _cache_ttl(name: str, default: int) -> int:
-    return int(getattr(Config, name, default))
 
 
 SEARCH_QUERY = """
@@ -308,7 +306,7 @@ class AniListSource(AnimeSource):
             return self._cached(
                 f"details:{source_id}",
                 lambda: self._fetch_details(source_id),
-                ttl=_cache_ttl("CATALOG_CACHE_TTL_DETAILS", 7200),
+                ttl=Config.CATALOG_CACHE_TTL,
             )
         return self._fetch_details(source_id)
 
@@ -423,14 +421,14 @@ class AniListSource(AnimeSource):
         return self._cached(f"{cache_prefix}{sort}:{page}", fetch, ttl=ttl)
 
     def get_trending(self, page: int = 1) -> dict:
-        return self._discover("TRENDING_DESC", page, ttl=_cache_ttl("CATALOG_CACHE_TTL_TRENDING", 600))
+        return self._discover("TRENDING_DESC", page, ttl=Config.CATALOG_CACHE_TTL)
 
     def get_popular(self, page: int = 1) -> dict:
         # Backs the "Top Airing" section — must only include anime that is
         # currently releasing, not just anime that is popular overall.
         return self._discover(
             "POPULARITY_DESC", page, query=DISCOVER_AIRING_QUERY,
-            cache_prefix="airing:", ttl=_cache_ttl("CATALOG_CACHE_TTL_AIRING", 900),
+            cache_prefix="airing:", ttl=Config.CATALOG_CACHE_TTL,
         )
 
     def get_most_popular(self, page: int = 1) -> dict:
@@ -438,7 +436,7 @@ class AniListSource(AnimeSource):
         # regardless of airing status (unlike get_popular/"Top Airing").
         return self._discover(
             "POPULARITY_DESC", page, cache_prefix="popular-all:",
-            ttl=_cache_ttl("CATALOG_CACHE_TTL_POPULAR", 3600),
+            ttl=Config.CATALOG_CACHE_TTL,
         )
 
     def _discover_manga(self, sort: str, page: int = 1, query: str = MANGA_DISCOVER_QUERY, cache_prefix: str = "manga:", ttl: int | None = None) -> dict:
@@ -487,22 +485,22 @@ class AniListSource(AnimeSource):
         def fetch():
             general = self._discover_manga(
                 "TRENDING_DESC", page, query=MANGA_DISCOVER_QUERY,
-                cache_prefix="m-trend-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_TRENDING", 600),
+                cache_prefix="m-trend-v3:", ttl=Config.CATALOG_CACHE_TTL,
             )
             manhwa = self._discover_manga(
                 "TRENDING_DESC", page, query=MANHWA_DISCOVER_QUERY,
-                cache_prefix="m-trend-kr-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_TRENDING", 600),
+                cache_prefix="m-trend-kr-v3:", ttl=Config.CATALOG_CACHE_TTL,
             )
             return self._merge_manga_pages(manhwa, general)
         return self._cached(
-            f"manga-trend-merged-v3:{page}", fetch, ttl=_cache_ttl("CATALOG_CACHE_TTL_TRENDING", 600)
+            f"manga-trend-merged-v3:{page}", fetch, ttl=Config.CATALOG_CACHE_TTL
         )
 
     def get_airing_manga(self, page: int = 1) -> dict:
         """Ongoing adult manga / manhwa / doujin — Top Airing row."""
         return self._discover_manga(
             "POPULARITY_DESC", page, query=MANGA_AIRING_QUERY,
-            cache_prefix="m-air-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_AIRING", 900),
+            cache_prefix="m-air-v3:", ttl=Config.CATALOG_CACHE_TTL,
         )
 
     def get_popular_manga(self, page: int = 1) -> dict:
@@ -510,15 +508,15 @@ class AniListSource(AnimeSource):
         def fetch():
             general = self._discover_manga(
                 "POPULARITY_DESC", page, query=MANGA_DISCOVER_QUERY,
-                cache_prefix="m-pop-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_POPULAR", 3600),
+                cache_prefix="m-pop-v3:", ttl=Config.CATALOG_CACHE_TTL,
             )
             manhwa = self._discover_manga(
                 "POPULARITY_DESC", page, query=MANHWA_DISCOVER_QUERY,
-                cache_prefix="m-pop-kr-v3:", ttl=_cache_ttl("CATALOG_CACHE_TTL_POPULAR", 3600),
+                cache_prefix="m-pop-kr-v3:", ttl=Config.CATALOG_CACHE_TTL,
             )
             return self._merge_manga_pages(manhwa, general)
         return self._cached(
-            f"manga-pop-merged-v3:{page}", fetch, ttl=_cache_ttl("CATALOG_CACHE_TTL_POPULAR", 3600)
+            f"manga-pop-merged-v3:{page}", fetch, ttl=Config.CATALOG_CACHE_TTL
         )
 
     # Back-compat aliases used by older routes
@@ -572,5 +570,5 @@ class AniListSource(AnimeSource):
         return self._cached(
             f"genre:{media_type}:{genre}:{page}",
             fetch,
-            ttl=_cache_ttl("CATALOG_CACHE_TTL_GENRE", 1800),
+            ttl=Config.CATALOG_CACHE_TTL,
         )
