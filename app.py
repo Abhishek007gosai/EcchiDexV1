@@ -1005,6 +1005,30 @@ def api_profile():
     return jsonify(profile)
 
 
+@app.get("/api/profile/help")
+def api_profile_help():
+    """Need-help card: title, text, and link buttons for the Profile page."""
+    return jsonify(db.get_profile_help())
+
+
+@app.put("/api/profile/help")
+def api_profile_help_update():
+    """Admin: update help card title/text and/or the list of links."""
+    user = current_user()
+    if not is_admin(user):
+        abort(403)
+    payload = request.get_json(force=True, silent=True) or {}
+    if "title" in payload or "text" in payload:
+        db.set_profile_help(title=payload.get("title"), text=payload.get("text"))
+    if "links" in payload:
+        links = payload.get("links")
+        if not isinstance(links, list):
+            return jsonify(error="links must be a list"), 400
+        db.set_profile_links(links)
+    return jsonify(db.get_profile_help())
+
+
+
 def propagate_link_full_franchise(anime_id: int, link: str) -> int:
     """Like db.propagate_join_link, but not limited to titles that are
     already posted. db.propagate_join_link can only *update* MongoDB docs
