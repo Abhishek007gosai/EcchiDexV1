@@ -1645,17 +1645,23 @@
       genreLoadMore.classList.remove("hidden");
     }
     try {
-      const data = await api(
-        `/api/genres/${encodeURIComponent(genreViewName)}?page=${genrePage}&type=${encodeURIComponent(genreType)}`
+      const data = await safeApi(
+        `/api/genres/${encodeURIComponent(genreViewName)}?page=${genrePage}&type=${encodeURIComponent(genreType || "ANIME")}`,
+        { results: [], has_next: false }
       );
       genreHasNext = !!data.has_next;
       const availIndex = buildAvailableIndex();
-      (data.results || []).forEach((item) => {
-        const matched = availIndex.match(item);
-        item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-        genreBrowseGrid.appendChild(simplePosterCard(item, () => openGenreItemDetail(item)));
+      const rows = data.results || [];
+      rows.forEach((item) => {
+        try {
+          const matched = availIndex.match(item);
+          item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
+          genreBrowseGrid.appendChild(simplePosterCard(item, () => openGenreItemDetail(item)));
+        } catch (cardErr) {
+          console.warn("genre card failed", cardErr);
+        }
       });
-      if (!(data.results || []).length && reset) {
+      if (!rows.length && reset) {
         const p = document.createElement("p");
         p.className = "empty-note";
         p.style.padding = "24px 8px";
@@ -1665,7 +1671,15 @@
         genreBrowseGrid.appendChild(p);
       }
     } catch (err) {
-      showToast("Couldn't load that genre right now.");
+      console.warn("genre load failed", err);
+      if (reset && genreBrowseGrid) {
+        genreBrowseGrid.innerHTML = "";
+        const p = document.createElement("p");
+        p.className = "empty-note";
+        p.style.padding = "24px 8px";
+        p.textContent = "Couldn't load this genre. Try again.";
+        genreBrowseGrid.appendChild(p);
+      }
     }
     if (genreLoadMore) {
       genreLoadMore.disabled = false;
