@@ -528,7 +528,7 @@
     ongoingManhwa.forEach((item) => {
       const matched = availIndex.match(item);
       item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-      hmanhwaOngoingGrid.appendChild(popularGridCard(item, () => openDiscoverDetail(item)));
+      hmanhwaOngoingGrid.appendChild(posterScrollCard(item, () => openDiscoverDetail(item)));
     });
     if (hmanhwaOngoingMore) hmanhwaOngoingMore.classList.toggle("hidden", !ongoingManhwaHasNext);
   }
