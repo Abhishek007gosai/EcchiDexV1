@@ -663,70 +663,70 @@ def api_proxy_image():
         abort(502)
 
 
+def _catalog_json(payload, max_age: int):
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = f"public, max-age={max_age}"
+    return resp
+
+
 @app.get("/api/catalog/trending")
 def api_trending():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_trending(page))
+        data = SOURCES["anilist"].get_trending(page)
     except requests.RequestException:
-        return jsonify({"results": [], "has_next": False})
-    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
-    return resp
+        data = {"results": [], "has_next": False}
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL_TRENDING)
 
 
 @app.get("/api/catalog/popular")
 def api_popular():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_popular(page))
+        data = SOURCES["anilist"].get_popular(page)
     except requests.RequestException:
-        return jsonify({"results": [], "has_next": False})
-    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
-    return resp
+        data = {"results": [], "has_next": False}
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL_AIRING)
 
 
 @app.get("/api/catalog/most-popular")
 def api_most_popular():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_most_popular(page))
+        data = SOURCES["anilist"].get_most_popular(page)
     except requests.RequestException:
-        return jsonify({"results": [], "has_next": False})
-    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
-    return resp
+        data = {"results": [], "has_next": False}
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL_POPULAR)
 
 
 @app.get("/api/catalog/manga/trending")
 def api_manga_trending():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_trending_manga(page))
+        data = SOURCES["anilist"].get_trending_manga(page)
     except requests.RequestException:
-        return jsonify({"results": [], "has_next": False})
-    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
-    return resp
+        data = {"results": [], "has_next": False}
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL_TRENDING)
 
 
 @app.get("/api/catalog/manga/airing")
 def api_manga_airing():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_airing_manga(page))
+        data = SOURCES["anilist"].get_airing_manga(page)
     except requests.RequestException:
-        return jsonify({"results": [], "has_next": False})
-    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
-    return resp
+        data = {"results": [], "has_next": False}
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL_AIRING)
 
 
 @app.get("/api/catalog/manga/popular")
 def api_manga_popular():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_popular_manga(page))
+        data = SOURCES["anilist"].get_popular_manga(page)
     except requests.RequestException:
-        return jsonify({"results": [], "has_next": False})
-    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
-    return resp
+        data = {"results": [], "has_next": False}
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL_POPULAR)
 
 
 # Back-compat aliases
@@ -793,8 +793,11 @@ def api_search_manga():
 @app.get("/api/genres/<genre>")
 def api_genre_browse(genre):
     page = request.args.get("page", 1, type=int)
+    media_type = (request.args.get("type") or "ANIME").upper()
+    if media_type not in ("ANIME", "MANGA"):
+        media_type = "ANIME"
     try:
-        return jsonify(SOURCES["anilist"].browse_genre(genre, page))
+        return jsonify(SOURCES["anilist"].browse_genre(genre, page, media_type=media_type))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
 
