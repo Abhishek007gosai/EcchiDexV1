@@ -42,6 +42,15 @@
     return res.json();
   }
 
+  async function safeApi(path, fallback = { results: [], has_next: false }) {
+    try {
+      return await api(path);
+    } catch (err) {
+      console.warn("API failed", path, err);
+      return fallback;
+    }
+  }
+
   function debounce(fn, ms) {
     let t;
     return (...args) => {
@@ -139,6 +148,10 @@
   const hanimeLetterBar = el("hanime-letter-bar");
   const hanimeGroups = el("hanime-groups");
   const hanimeEmpty = el("hanime-empty");
+  const hanimeTrendingRow = el("hanime-trending-row");
+  const hanimePopularGrid = el("hanime-popular-grid");
+  const hanimePopularMore = el("hanime-popular-more");
+  const hmanhwaOngoingEmpty = el("hmanhwa-ongoing-empty");
   const hmanhwaLetterBar = el("hmanhwa-letter-bar");
   const hmanhwaGroups = el("hmanhwa-groups");
   const hmanhwaEmpty = el("hmanhwa-empty");
@@ -225,6 +238,11 @@
   let ongoingManhwaPage = 1;
   let ongoingManhwaHasNext = false;
   let ongoingManhwaLoading = false;
+  let hanimeDiscTrending = [];
+  let hanimeDiscPopular = [];
+  let hanimeDiscPopularPage = 1;
+  let hanimeDiscPopularHasNext = false;
+  let hanimeDiscLoading = false;
 
   const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
   // "#" comes first, same convention as Spotify/Apple Music/contacts apps,
@@ -249,15 +267,18 @@
     const byId = new Map();
     const byTitle = new Map();
     available.forEach((a) => {
-      if (a.source === "anilist" && a.source_id != null) {
-        byId.set(String(a.source_id), a);
+      if (a.source_id != null) {
+        byId.set(`${a.source || "anilist"}:${a.source_id}`, a);
+        byId.set(String(a.source_id), a); // legacy plain-id match
       }
       byTitle.set(a.title.toLowerCase(), a);
     });
     return {
       match(item) {
-        if (item.anilist_id != null) {
-          const m = byId.get(String(item.anilist_id));
+        if (item.source_id != null || item.anilist_id != null) {
+          const src = item.source || (item.anilist_id != null ? "anilist" : "mangadex");
+          const sid = item.source_id ?? item.anilist_id;
+          const m = byId.get(`${src}:${sid}`) || byId.get(String(sid));
           if (m) return m;
         }
         return byTitle.get((item.title || "").toLowerCase()) || null;
@@ -424,7 +445,10 @@
     if (tabAll) tabAll.classList.toggle("hidden", tab !== "all");
     if (tabHanime) tabHanime.classList.toggle("hidden", tab !== "hanime");
     if (tabHmanhwa) tabHmanhwa.classList.toggle("hidden", tab !== "hmanhwa");
-    if (tab === "hanime") renderTypeLibrary("ANIME");
+    if (tab === "hanime") {
+      loadHanimeDiscover();
+      renderTypeLibrary("ANIME");
+    }
     if (tab === "hmanhwa") showHmanhwaStatus(hmanhwaStatus || "ongoing");
   }
   pillTabs.forEach((b) => b.addEventListener("click", () => setPillTab(b.dataset.tab)));
@@ -449,6 +473,57 @@
     btn.addEventListener("click", () => showHmanhwaStatus(btn.dataset.status));
   });
 
+
+  function renderHanimeDiscover() {
+    fillHscroll(hanimeTrendingRow, hanimeDiscTrending, trendingCard);
+    fillGrid(hanimePopularGrid, hanimeDiscPopular);
+    if (hanimePopularMore) hanimePopularMore.classList.toggle("hidden", !hanimeDiscPopularHasNext);
+    noteEmpty(hanimeTrendingRow, "Hentai feed unavailable right now");
+    noteEmpty(hanimePopularGrid, "Hentai feed unavailable right now");
+  }
+
+  async function loadHanimeDiscover() {
+    if (hanimeDiscLoading) return;
+    if (hanimeDiscTrending.length || hanimeDiscPopular.length) {
+      renderHanimeDiscover();
+      return;
+    }
+    hanimeDiscLoading = true;
+    renderSkeletonRow(hanimeTrendingRow, 4);
+    renderSkeletonRow(hanimePopularGrid, 6);
+    const [t, p] = await Promise.all([
+      safeApi("/api/catalog/trending"),
+      safeApi("/api/catalog/most-popular"),
+    ]);
+    hanimeDiscTrending = t.results || [];
+    hanimeDiscPopular = p.results || [];
+    hanimeDiscPopularHasNext = !!p.has_next;
+    hanimeDiscPopularPage = 1;
+    renderHanimeDiscover();
+    hanimeDiscLoading = false;
+  }
+
+  async function loadMoreHanimePopular() {
+    if (hanimeDiscLoading || !hanimeDiscPopularHasNext) return;
+    hanimeDiscLoading = true;
+    if (hanimePopularMore) {
+      hanimePopularMore.disabled = true;
+      hanimePopularMore.textContent = "Loading…";
+    }
+    const data = await safeApi(`/api/catalog/most-popular?page=${hanimeDiscPopularPage + 1}`);
+    hanimeDiscPopularPage += 1;
+    hanimeDiscPopular = hanimeDiscPopular.concat(data.results || []);
+    hanimeDiscPopularHasNext = !!data.has_next;
+    fillGrid(hanimePopularGrid, hanimeDiscPopular);
+    if (hanimePopularMore) {
+      hanimePopularMore.disabled = false;
+      hanimePopularMore.textContent = "Load more";
+      hanimePopularMore.classList.toggle("hidden", !hanimeDiscPopularHasNext);
+    }
+    hanimeDiscLoading = false;
+  }
+  if (hanimePopularMore) hanimePopularMore.addEventListener("click", loadMoreHanimePopular);
+
   function renderOngoingManhwa() {
     if (!hmanhwaOngoingGrid) return;
     hmanhwaOngoingGrid.innerHTML = "";
@@ -464,17 +539,16 @@
   async function loadOngoingManhwa() {
     if (ongoingManhwaLoading) return;
     ongoingManhwaLoading = true;
+    if (hmanhwaOngoingEmpty) hmanhwaOngoingEmpty.classList.add("hidden");
     renderSkeletonRow(hmanhwaOngoingGrid, 6);
-    try {
-      const data = await api("/api/catalog/manga/airing");
-      ongoingManhwa = data.results || [];
-      ongoingManhwaHasNext = !!data.has_next;
-      ongoingManhwaPage = 1;
-    } catch (err) {
-      ongoingManhwa = [];
-      ongoingManhwaHasNext = false;
-    }
+    const data = await safeApi("/api/catalog/manga/airing");
+    ongoingManhwa = data.results || [];
+    ongoingManhwaHasNext = !!data.has_next;
+    ongoingManhwaPage = 1;
     renderOngoingManhwa();
+    if (!ongoingManhwa.length && hmanhwaOngoingEmpty) {
+      hmanhwaOngoingEmpty.classList.remove("hidden");
+    }
     ongoingManhwaLoading = false;
   }
 
@@ -589,6 +663,16 @@
   if (allPopularHentaiMore) allPopularHentaiMore.addEventListener("click", loadMoreHentaiPopular);
   if (allPopularMangaMore) allPopularMangaMore.addEventListener("click", loadMoreMangaPopular);
 
+  function noteEmpty(container, msg) {
+    if (!container) return;
+    if (container.children.length) return;
+    const p = document.createElement("p");
+    p.className = "empty-note";
+    p.style.padding = "12px 0";
+    p.textContent = msg;
+    container.appendChild(p);
+  }
+
   async function loadAllDiscover() {
     renderSkeletonRow(allTrendingHentai, 4);
     renderSkeletonRow(allAiringHentai, 4);
@@ -597,51 +681,47 @@
     renderSkeletonRow(allAiringManga, 4);
     renderSkeletonRow(allPopularManga, 4);
 
-    // Wave 1: hentai (fill UI first)
-    try {
-      const [ht, ha, hp] = await Promise.all([
-        api("/api/catalog/trending"),
-        api("/api/catalog/popular"),
-        api("/api/catalog/most-popular"),
-      ]);
-      hTrending = ht.results || [];
-      hAiring = ha.results || [];
-      hAiringHasNext = !!ha.has_next;
-      hAiringPage = 1;
-      hPopular = hp.results || [];
-      hPopularHasNext = !!hp.has_next;
-      hPopularPage = 1;
-    } catch (err) {
-      hTrending = []; hAiring = []; hPopular = [];
-      hPopularHasNext = false;
-    }
-    fillHscroll(allTrendingHentai, hTrending, trendingCard);
-    fillHscroll(allAiringHentai, hAiring, topAiringCard);
-    fillGrid(allPopularHentai, hPopular);
-    if (allPopularHentaiMore) allPopularHentaiMore.classList.toggle("hidden", !hPopularHasNext);
-
-    // Wave 2: manga / manhwa
-    try {
-      const [mt, ma, mp] = await Promise.all([
-        api("/api/catalog/manga/trending"),
-        api("/api/catalog/manga/airing"),
-        api("/api/catalog/manga/popular"),
-      ]);
-      mTrending = mt.results || [];
-      mAiring = ma.results || [];
-      mAiringHasNext = !!ma.has_next;
-      mAiringPage = 1;
-      mPopular = mp.results || [];
-      mPopularHasNext = !!mp.has_next;
-      mPopularPage = 1;
-    } catch (err) {
-      mTrending = []; mAiring = []; mPopular = [];
-      mPopularHasNext = false;
-    }
+    // Wave 1: MangaDex first (usually fastest / most reliable)
+    const [mt, ma, mp] = await Promise.all([
+      safeApi("/api/catalog/manga/trending"),
+      safeApi("/api/catalog/manga/airing"),
+      safeApi("/api/catalog/manga/popular"),
+    ]);
+    mTrending = mt.results || [];
+    mAiring = ma.results || [];
+    mAiringHasNext = !!ma.has_next;
+    mAiringPage = 1;
+    mPopular = mp.results || [];
+    mPopularHasNext = !!mp.has_next;
+    mPopularPage = 1;
     fillHscroll(allTrendingManga, mTrending, trendingCard);
     fillHscroll(allAiringManga, mAiring, topAiringCard);
     fillGrid(allPopularManga, mPopular);
     if (allPopularMangaMore) allPopularMangaMore.classList.toggle("hidden", !mPopularHasNext);
+    noteEmpty(allTrendingManga, "No manga loaded");
+    noteEmpty(allAiringManga, "No manga loaded");
+    noteEmpty(allPopularManga, "No manga loaded");
+
+    // Wave 2: AniList hentai
+    const [ht, ha, hp] = await Promise.all([
+      safeApi("/api/catalog/trending"),
+      safeApi("/api/catalog/popular"),
+      safeApi("/api/catalog/most-popular"),
+    ]);
+    hTrending = ht.results || [];
+    hAiring = ha.results || [];
+    hAiringHasNext = !!ha.has_next;
+    hAiringPage = 1;
+    hPopular = hp.results || [];
+    hPopularHasNext = !!hp.has_next;
+    hPopularPage = 1;
+    fillHscroll(allTrendingHentai, hTrending, trendingCard);
+    fillHscroll(allAiringHentai, hAiring, topAiringCard);
+    fillGrid(allPopularHentai, hPopular);
+    if (allPopularHentaiMore) allPopularHentaiMore.classList.toggle("hidden", !hPopularHasNext);
+    noteEmpty(allTrendingHentai, "Hentai feed unavailable");
+    noteEmpty(allAiringHentai, "Hentai feed unavailable");
+    noteEmpty(allPopularHentai, "Hentai feed unavailable");
   }
 
   // ---------------------------------------------------------------------
@@ -985,7 +1065,7 @@
         row.appendChild(requestBtn);
       }
 
-      if (profile && profile.role === "admin" && anime.anilist_id) {
+      if (profile && profile.role === "admin" && itemSourceId(anime) != null) {
         const plus = document.createElement("button");
         plus.className = "plus-btn";
         plus.textContent = "+";
@@ -1044,15 +1124,44 @@
     }
   }
 
+
+  function itemSource(item) {
+    if (item.source) return item.source;
+    if (item.anilist_id != null) return "anilist";
+    return "anilist";
+  }
+  function itemSourceId(item) {
+    if (item.source_id != null) return item.source_id;
+    if (item.anilist_id != null) return item.anilist_id;
+    return null;
+  }
+
   async function openDiscoverDetail(item) {
-    openDetailSheet({ ...item, description: "Loading synopsis...", genres: item.genres || [] }, "discover");
+    const source = itemSource(item);
+    const sid = itemSourceId(item);
+    openDetailSheet({
+      ...item,
+      source,
+      source_id: sid,
+      anilist_id: source === "anilist" ? sid : item.anilist_id,
+      description: "Loading synopsis...",
+      genres: item.genres || [],
+    }, "discover");
+    if (sid == null) return;
     try {
-      const full = await api(`/api/anilist/${item.anilist_id}`);
+      const full = await api(`/api/source/${encodeURIComponent(source)}/${encodeURIComponent(sid)}`);
       if (currentDetail && currentDetail.title === item.title) {
-        openDetailSheet({ ...full, anilist_id: item.anilist_id, rating: item.rating ?? full.rating, matchedJoinLink: item.matchedJoinLink }, "discover");
+        openDetailSheet({
+          ...full,
+          source,
+          source_id: sid,
+          anilist_id: source === "anilist" ? sid : null,
+          rating: item.rating ?? full.rating,
+          matchedJoinLink: item.matchedJoinLink,
+        }, "discover");
       }
     } catch (err) {
-      if (currentDetail) detailDescription.textContent = "Couldn't load full details.";
+      if (currentDetail) detailDescription.textContent = item.synopsis || "Couldn't load synopsis.";
     }
   }
 
@@ -1120,14 +1229,17 @@
       } else {
         // Not in the local library yet (Discover/Genre post) — this creates
         // the library entry with the link already set in one step.
-        result = await api(`/api/anime/link-anilist/${linkTargetAnime.anilist_id}`, {
+        const src = itemSource(linkTargetAnime);
+        const sid = itemSourceId(linkTargetAnime);
+        result = await api(`/api/anime/link-source/${encodeURIComponent(src)}/${encodeURIComponent(sid)}`, {
           method: "POST",
           body: JSON.stringify({ link: value }),
         });
-        linkTargetAnime.id = result.anime.id;
-        linkTargetAnime.join_link = result.anime.join_link;
-        linkTargetAnime.matchedJoinLink = result.anime.join_link;
-        if (currentDetail && currentDetail.anilist_id === linkTargetAnime.anilist_id) {
+        const animeRow = result.anime || result;
+        linkTargetAnime.id = animeRow.id;
+        linkTargetAnime.join_link = animeRow.join_link;
+        linkTargetAnime.matchedJoinLink = animeRow.join_link;
+        if (currentDetail && String(itemSourceId(currentDetail)) === String(sid)) {
           currentDetail.id = result.anime.id;
           currentDetail.join_link = result.anime.join_link;
           currentDetail.matchedJoinLink = result.anime.join_link;

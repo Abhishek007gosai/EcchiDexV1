@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#131310" />
   <title>{{ brand_name }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=12" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body data-brand="{{ brand_name }}">
@@ -74,20 +74,48 @@
         </section>
       </div>
 
-      <!-- H-ANIME: A–Z available hentai (set join links) -->
+      <!-- H-ANIME: browse hentai + set join links -->
       <div id="tab-hanime" class="hidden">
-        <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available H-ANIME</h2>
-        <div id="hanime-letter-bar" class="letter-bar"></div>
-        <div id="hanime-groups"></div>
-        <p id="hanime-empty" class="empty-note hidden">No hanime posted yet. Open a title from ALL and use + to set a join link.</p>
+        <section>
+          <div class="section-header-row">
+            <h2 class="section-header section-header--trending"><span class="accent-bar"></span>Trending Hentai</h2>
+          </div>
+          <div id="hanime-trending-row" class="hscroll"></div>
+        </section>
+        <section>
+          <div class="section-header-row">
+            <h2 class="section-header section-header--popular"><span class="accent-bar"></span>Popular Hentai</h2>
+          </div>
+          <div id="hanime-popular-grid" class="popular-grid"></div>
+          <button id="hanime-popular-more" class="load-more-btn" type="button">Load more</button>
+        </section>
+        <section>
+          <h2 class="section-header section-header--available"><span class="accent-bar"></span>Your linked H-ANIME</h2>
+          <div id="hanime-letter-bar" class="letter-bar"></div>
+          <div id="hanime-groups"></div>
+          <p id="hanime-empty" class="empty-note">No linked hanime yet. Open a title above and use + to set a join link.</p>
+        </section>
       </div>
 
-      <!-- H-MANHWA: Ongoing = discovery (set links) | Finished = A–Z library -->
+      <!-- H-MANHWA: Ongoing discovery | Finished A–Z -->
       <div id="tab-hmanhwa" class="hidden">
         <div class="status-tabs" role="tablist">
           <button class="status-tab active" data-status="ongoing" type="button">Ongoing</button>
           <button class="status-tab" data-status="finished" type="button">Finished</button>
         </div>
+
+        <div id="hmanhwa-ongoing-panel">
+          <div id="hmanhwa-ongoing-grid" class="popular-grid"></div>
+          <button id="hmanhwa-ongoing-more" class="load-more-btn" type="button">Load more</button>
+          <p id="hmanhwa-ongoing-empty" class="empty-note hidden">Couldn't load ongoing titles. Pull to refresh or try again later.</p>
+        </div>
+
+        <div id="hmanhwa-finished-panel" class="hidden">
+          <div id="hmanhwa-letter-bar" class="letter-bar"></div>
+          <div id="hmanhwa-groups"></div>
+          <p id="hmanhwa-empty" class="empty-note">No finished manhwa linked yet. Use Ongoing to find titles and set a join link.</p>
+        </div>
+      </div>
 
         <!-- Ongoing: browse releasing manhwa/manga and set join links -->
         <div id="hmanhwa-ongoing-panel">
@@ -258,6 +286,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=12"></script>
 </body>
 </html>
