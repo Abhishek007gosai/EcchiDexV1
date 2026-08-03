@@ -446,32 +446,32 @@ class AniListSource(AnimeSource):
         """Trending adult manga + manhwa + doujinshi (UI label stays Manga / Manhwa)."""
         def fetch():
             general = self._discover_manga(
-                "TRENDING_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="m-trend-v2:"
+                "TRENDING_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="m-trend-v3:"
             )
             # Also pull KR adult (pornhwa) so manhwa is not buried under JP titles
             manhwa = self._discover_manga(
-                "TRENDING_DESC", page, query=MANHWA_DISCOVER_QUERY, cache_prefix="m-trend-kr-v2:"
+                "TRENDING_DESC", page, query=MANHWA_DISCOVER_QUERY, cache_prefix="m-trend-kr-v3:"
             )
             return self._merge_manga_pages(manhwa, general)
-        return self._cached(f"manga-trend-merged-v2:{page}", fetch)
+        return self._cached(f"manga-trend-merged-v3:{page}", fetch)
 
     def get_airing_manga(self, page: int = 1) -> dict:
         """Ongoing adult manga / manhwa / doujin — Top Airing row."""
         return self._discover_manga(
-            "POPULARITY_DESC", page, query=MANGA_AIRING_QUERY, cache_prefix="m-air-v2:"
+            "POPULARITY_DESC", page, query=MANGA_AIRING_QUERY, cache_prefix="m-air-v3:"
         )
 
     def get_popular_manga(self, page: int = 1) -> dict:
         """Popular adult manga + manhwa + doujinshi."""
         def fetch():
             general = self._discover_manga(
-                "POPULARITY_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="m-pop-v2:"
+                "POPULARITY_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="m-pop-v3:"
             )
             manhwa = self._discover_manga(
-                "POPULARITY_DESC", page, query=MANHWA_DISCOVER_QUERY, cache_prefix="m-pop-kr-v2:"
+                "POPULARITY_DESC", page, query=MANHWA_DISCOVER_QUERY, cache_prefix="m-pop-kr-v3:"
             )
             return self._merge_manga_pages(manhwa, general)
-        return self._cached(f"manga-pop-merged-v2:{page}", fetch)
+        return self._cached(f"manga-pop-merged-v3:{page}", fetch)
 
     # Back-compat aliases used by older routes
     def get_trending_manhwa(self, page: int = 1) -> dict:
