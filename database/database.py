@@ -154,6 +154,13 @@ def cache_get(key: str):
     return doc.get("value")
 
 
+def cache_clear_all() -> int:
+    """Drop every catalog_cache row. Called on boot so a redeploy never
+    serves stale MangaDex (or other) payloads after a source switch."""
+    result = cache_col.delete_many({})
+    return result.deleted_count
+
+
 def cache_set(key: str, value, ttl_seconds: int | None = None):
     from datetime import datetime, timezone, timedelta
     from config import Config
