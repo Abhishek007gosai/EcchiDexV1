@@ -30,14 +30,7 @@ class Config:
     # Markdown (e.g. _italics_, *bold*). Since env vars are single-line,
     # write literal "\n" for line breaks — they're converted to real
     # newlines below.
-    START_MSG = os.environ.get(
-        "START_MSG",
-        "HELLO {first_name}\\n\\n"
-        "I am {brand_name} bot. Use /anidex to browse, search and request anime.\\n\\n"
-        "\U0001f4fa Browse trending anime, search for your favorites, and "
-        "request anime that isn't available yet.\\n\\n"
-        "_Your all-in-one anime station._",
-    ).replace("\\n", "\n")
+    START_MSG = os.environ.get("START_MSG", "<b>ᴛʜɪs ɪs ᴀɴɪᴍᴇ ɪɴᴅᴇx ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ʙʀᴏᴡsᴇ, sᴇᴀʀᴄʜ ʏᴏᴜ ғᴀᴠᴏᴜʀɪᴛᴇ ᴀɴɪᴍᴇ</b>")
 
     # --- Telegram bot (Bot API) ---
     BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
