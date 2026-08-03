@@ -765,33 +765,48 @@ def clear_popular_searches() -> None:
 # App settings (profile links, etc.)
 # ---------------------------------------------------------------------------
 
-def get_profile_links() -> list[dict]:
-    """Profile help-card links — only from Mongo (edited in the mini app)."""
-    doc = counters_col.find_one({"_id": "profile_links"})
-    if not doc or not isinstance(doc.get("links"), list):
-        return []
-    out = []
-    for item in doc["links"]:
-        if not isinstance(item, dict):
-            continue
-        name = (item.get("name") or "").strip()
-        url = (item.get("url") or "").strip()
-        if name and url:
-            out.append({"name": name, "url": url})
-    return out
-
-
-def set_profile_links(links: list[dict]) -> list[dict]:
+def _clean_link_list(items) -> list[dict]:
     clean = []
-    for item in links or []:
+    for item in items or []:
         if not isinstance(item, dict):
             continue
         name = (item.get("name") or "").strip()
         url = (item.get("url") or "").strip()
         if name and url:
             clean.append({"name": name, "url": url})
+    return clean
+
+
+def get_profile_links() -> list[dict]:
+    """Primary profile help-card links — only from Mongo (edited in the mini app)."""
+    doc = counters_col.find_one({"_id": "profile_links"})
+    if not doc or not isinstance(doc.get("links"), list):
+        return []
+    return _clean_link_list(doc["links"])
+
+
+def set_profile_links(links: list[dict]) -> list[dict]:
+    clean = _clean_link_list(links)
     counters_col.update_one(
         {"_id": "profile_links"},
+        {"$set": {"links": clean, "updated_at": time.time()}},
+        upsert=True,
+    )
+    return clean
+
+
+def get_more_channel_links() -> list[dict]:
+    """Extra channel links shown when the user taps MORE CHANNELS."""
+    doc = counters_col.find_one({"_id": "profile_more_links"})
+    if not doc or not isinstance(doc.get("links"), list):
+        return []
+    return _clean_link_list(doc["links"])
+
+
+def set_more_channel_links(links: list[dict]) -> list[dict]:
+    clean = _clean_link_list(links)
+    counters_col.update_one(
+        {"_id": "profile_more_links"},
         {"$set": {"links": clean, "updated_at": time.time()}},
         upsert=True,
     )
@@ -805,7 +820,12 @@ def get_profile_help() -> dict:
     text = (doc.get("text") or "").strip() or (
         "Notifications, requests, and channel links are all managed through the bot."
     )
-    return {"title": title, "text": text, "links": get_profile_links()}
+    return {
+        "title": title,
+        "text": text,
+        "links": get_profile_links(),
+        "more_links": get_more_channel_links(),
+    }
 
 
 def set_profile_help(title: str | None = None, text: str | None = None) -> dict:
