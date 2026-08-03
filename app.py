@@ -676,7 +676,7 @@ def api_trending():
         data = SOURCES["anilist"].get_trending(page)
     except requests.RequestException:
         data = {"results": [], "has_next": False}
-    return _catalog_json(data, getattr(Config, "CATALOG_CACHE_TTL_TRENDING", 600))
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL)
 
 
 @app.get("/api/catalog/popular")
@@ -686,7 +686,7 @@ def api_popular():
         data = SOURCES["anilist"].get_popular(page)
     except requests.RequestException:
         data = {"results": [], "has_next": False}
-    return _catalog_json(data, getattr(Config, "CATALOG_CACHE_TTL_AIRING", 900))
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL)
 
 
 @app.get("/api/catalog/most-popular")
@@ -696,7 +696,7 @@ def api_most_popular():
         data = SOURCES["anilist"].get_most_popular(page)
     except requests.RequestException:
         data = {"results": [], "has_next": False}
-    return _catalog_json(data, getattr(Config, "CATALOG_CACHE_TTL_POPULAR", 3600))
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL)
 
 
 @app.get("/api/catalog/manga/trending")
@@ -706,7 +706,7 @@ def api_manga_trending():
         data = SOURCES["anilist"].get_trending_manga(page)
     except requests.RequestException:
         data = {"results": [], "has_next": False}
-    return _catalog_json(data, getattr(Config, "CATALOG_CACHE_TTL_TRENDING", 600))
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL)
 
 
 @app.get("/api/catalog/manga/airing")
@@ -716,7 +716,7 @@ def api_manga_airing():
         data = SOURCES["anilist"].get_airing_manga(page)
     except requests.RequestException:
         data = {"results": [], "has_next": False}
-    return _catalog_json(data, getattr(Config, "CATALOG_CACHE_TTL_AIRING", 900))
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL)
 
 
 @app.get("/api/catalog/manga/popular")
@@ -726,7 +726,7 @@ def api_manga_popular():
         data = SOURCES["anilist"].get_popular_manga(page)
     except requests.RequestException:
         data = {"results": [], "has_next": False}
-    return _catalog_json(data, getattr(Config, "CATALOG_CACHE_TTL_POPULAR", 3600))
+    return _catalog_json(data, Config.CATALOG_CACHE_TTL)
 
 
 # Back-compat aliases

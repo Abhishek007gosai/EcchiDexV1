@@ -70,16 +70,7 @@ class Config:
     # --- External metadata sources ---
     ANILIST_ENDPOINT = "https://graphql.anilist.co"
 
-    # How long (seconds) trending/popular results are cached in memory
-    # before being re-fetched from AniList.
-    # Default / fallback catalog cache lifetime
-    CATALOG_CACHE_TTL = int(os.environ.get("CATALOG_CACHE_TTL", "1200"))  # 20 min
-    # Tiered TTLs — trending changes often; popular/details are stable
-    CATALOG_CACHE_TTL_TRENDING = int(os.environ.get("CATALOG_CACHE_TTL_TRENDING", "600"))   # 10 min
-    CATALOG_CACHE_TTL_AIRING = int(os.environ.get("CATALOG_CACHE_TTL_AIRING", "900"))       # 15 min
-    CATALOG_CACHE_TTL_POPULAR = int(os.environ.get("CATALOG_CACHE_TTL_POPULAR", "3600"))    # 1 hour
-    CATALOG_CACHE_TTL_DETAILS = int(os.environ.get("CATALOG_CACHE_TTL_DETAILS", "7200"))    # 2 hours
-    CATALOG_CACHE_TTL_GENRE = int(os.environ.get("CATALOG_CACHE_TTL_GENRE", "1800"))        # 30 min
-    # Bump this env (e.g. "4") once after a breaking source change to wipe
-    # catalog_cache on next boot. Unchanged generation = keep warm cache.
+    # Catalog cache lifetime (seconds). One TTL for all AniList feeds.
+    CATALOG_CACHE_TTL = int(os.environ.get("CATALOG_CACHE_TTL", "1800"))  # 30 min
+    # Bump to wipe catalog_cache on next boot after a breaking change.
     CACHE_GENERATION = os.environ.get("CACHE_GENERATION", "3")
