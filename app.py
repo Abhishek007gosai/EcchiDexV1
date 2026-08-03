@@ -614,12 +614,55 @@ def healthz():
         SOURCES["anilist"].get_trending()
         SOURCES["anilist"].get_popular()
         SOURCES["anilist"].get_most_popular()
-        SOURCES["mangadex"].get_trending_manga()
-        SOURCES["mangadex"].get_airing_manga()
-        SOURCES["mangadex"].get_popular_manga()
+        SOURCES["anilist"].get_trending_manga()
+        SOURCES["anilist"].get_airing_manga()
+        SOURCES["anilist"].get_popular_manga()
     except Exception:
         pass
     return jsonify(status="ok")
+
+
+
+@app.get("/api/img")
+def api_proxy_image():
+    """Proxy remote cover images (MangaDex etc.) so the Telegram WebView can
+    display them. Only allowlisted hosts are fetched."""
+    from urllib.parse import urlparse, unquote
+
+    raw = request.args.get("u") or ""
+    url = unquote(raw).strip()
+    if not url.startswith("https://"):
+        abort(400)
+    host = (urlparse(url).hostname or "").lower()
+    allowed = {
+        "uploads.mangadex.org",
+        "mangadex.org",
+        "s4.anilist.co",
+        "s3.anilist.co",
+        "cdn.myanimelist.net",
+    }
+    if host not in allowed and not host.endswith(".mangadex.org"):
+        abort(403)
+    try:
+        upstream = requests.get(
+            url,
+            timeout=12,
+            headers={
+                "User-Agent": "HIndexBot/1.0 (cover-proxy)",
+                "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            },
+        )
+        if upstream.status_code != 200:
+            abort(upstream.status_code if upstream.status_code in (403, 404) else 502)
+        ct = upstream.headers.get("Content-Type") or "image/jpeg"
+        if not ct.startswith("image/"):
+            abort(502)
+        from flask import Response
+        resp = Response(upstream.content, mimetype=ct)
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+    except requests.RequestException:
+        abort(502)
 
 
 @app.get("/api/catalog/trending")
@@ -744,7 +787,7 @@ def api_search_manga():
     if not q:
         return jsonify({"results": [], "has_next": False})
     try:
-        return jsonify(SOURCES["mangadex"].search_manga(q, page))
+        return jsonify(SOURCES["anilist"].search_manga(q, page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
 
@@ -818,6 +861,9 @@ def api_set_link_from_source(source, source_id):
         abort(404)
     payload = request.get_json(force=True, silent=True) or {}
     raw_link = (payload.get("link") or "").strip()
+    library_section = (payload.get("library_section") or "").strip().lower() or None
+    if library_section not in (None, "ongoing", "finished"):
+        library_section = None
     try:
         link = normalize_join_link(raw_link)
     except ValueError as e:
@@ -827,9 +873,11 @@ def api_set_link_from_source(source, source_id):
         details = src.get_details(sid)
     except (requests.RequestException, ValueError, KeyError):
         return jsonify(error="Could not fetch title metadata"), 502
+    if library_section:
+        details["library_section"] = library_section
     anime_id = db.upsert_anime(details, added_by=user["id"])
     if link:
-        db.update_link(anime_id, link)
+        db.update_link(anime_id, link, library_section=library_section)
         try:
             propagate_link_full_franchise(anime_id, link)
         except Exception:
@@ -1010,6 +1058,9 @@ def api_edit_link(anime_id):
     raw_link = (payload.get("link") or "").strip()
     if not db.get_anime(anime_id):
         abort(404)
+    library_section = (payload.get("library_section") or "").strip().lower() or None
+    if library_section not in (None, "ongoing", "finished"):
+        library_section = None
     try:
         link = normalize_join_link(raw_link)
     except ValueError as e:
@@ -1028,7 +1079,7 @@ def api_edit_link(anime_id):
             db.upsert_anime(details)
         except requests.RequestException:
             pass  # AniList unreachable — keep whatever's cached, still set the link below
-        db.update_link(anime_id, link)
+        db.update_link(anime_id, link, library_section=library_section)
         propagated = propagate_link_full_franchise(anime_id, link)
         db.accept_requests_for_title(anime["title"])
         return jsonify(status="updated", link=link, propagated=propagated)
