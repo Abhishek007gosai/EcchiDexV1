@@ -26,6 +26,7 @@ reports_col = _db["reports"]
 requests_col = _db["requests"]
 searches_col = _db["searches"]
 counters_col = _db["counters"]
+cache_col = _db["catalog_cache"]
 
 
 def init_db():
@@ -37,6 +38,8 @@ def init_db():
     requests_col.create_index([("requested_by", ASCENDING), ("seen", ASCENDING)])
     requests_col.create_index([("requested_by", ASCENDING), ("responded_at", ASCENDING)])
     searches_col.create_index([("count", ASCENDING)])
+    cache_col.create_index([("key", ASCENDING)], unique=True)
+    cache_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
 
 
 def _next_id(counter_name: str) -> int:
@@ -52,6 +55,36 @@ def _next_id(counter_name: str) -> int:
 # ---------------------------------------------------------------------------
 # Anime catalog
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Catalog response cache (MongoDB) — survives restarts / multi-worker better
+# than in-memory only. TTL index on expires_at auto-deletes stale rows.
+# ---------------------------------------------------------------------------
+
+def cache_get(key: str):
+    """Return cached payload or None if missing/expired."""
+    import time
+    doc = cache_col.find_one({"key": key})
+    if not doc:
+        return None
+    if doc.get("expires_at") and doc["expires_at"].timestamp() < time.time():
+        return None
+    return doc.get("value")
+
+
+def cache_set(key: str, value, ttl_seconds: int | None = None):
+    from datetime import datetime, timezone, timedelta
+    from config import Config
+    ttl = ttl_seconds if ttl_seconds is not None else Config.CATALOG_CACHE_TTL
+    expires = datetime.now(timezone.utc) + timedelta(seconds=max(30, int(ttl)))
+    cache_col.update_one(
+        {"key": key},
+        {"$set": {"key": key, "value": value, "expires_at": expires}},
+        upsert=True,
+    )
+
+
 
 def _to_anime(doc) -> dict | None:
     if not doc:
