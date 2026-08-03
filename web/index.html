@@ -35,10 +35,11 @@
 
       <div class="pill-tabs">
         <button class="pill-tab active" data-tab="all">ALL</button>
-        <button class="pill-tab" data-tab="available">AVAILABLE</button>
+        <button class="pill-tab" data-tab="hanime">H-ANIME</button>
+        <button class="pill-tab" data-tab="hmanhwa">H-MANHWA</button>
       </div>
 
-      <!-- ALL: hentai + manga/manhwa side by side in each section -->
+      <!-- ALL: hentai + manga/manhwa side by side -->
       <div id="tab-all">
         <section>
           <div class="section-header-row">
@@ -73,26 +74,25 @@
         </section>
       </div>
 
-      <!-- AVAILABLE: sub-tabs HANIME | HMANHWA with A–Z + # -->
-      <div id="tab-available" class="hidden">
-        <div class="pill-tabs sub-pill-tabs">
-          <button class="pill-tab active" data-subtab="hanime">HANIME</button>
-          <button class="pill-tab" data-subtab="hmanhwa">HMANHWA</button>
+      <!-- H-ANIME: A–Z available hentai (set join links) -->
+      <div id="tab-hanime" class="hidden">
+        <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available H-ANIME</h2>
+        <div id="hanime-letter-bar" class="letter-bar"></div>
+        <div id="hanime-groups"></div>
+        <p id="hanime-empty" class="empty-note hidden">No hanime posted yet. Open a title from ALL and use + to set a join link.</p>
+      </div>
+
+      <!-- H-MANHWA: ONGOING / FINISHED sub-columns + A–Z -->
+      <div id="tab-hmanhwa" class="hidden">
+        <div class="status-tabs" role="tablist">
+          <button class="status-tab active" data-status="ongoing" type="button">Ongoing</button>
+          <button class="status-tab" data-status="finished" type="button">Finished</button>
         </div>
 
-        <div id="subtab-hanime">
-          <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available HANIME</h2>
-          <div id="hanime-letter-bar" class="letter-bar"></div>
-          <div id="hanime-groups"></div>
-          <p id="hanime-empty" class="empty-note hidden">No hanime posted yet. Open a title from ALL and use + to set a join link.</p>
-        </div>
-
-        <div id="subtab-hmanhwa" class="hidden">
-          <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available HMANHWA</h2>
-          <div id="hmanhwa-letter-bar" class="letter-bar"></div>
-          <div id="hmanhwa-groups"></div>
-          <p id="hmanhwa-empty" class="empty-note hidden">No manhwa/manga posted yet. Open a title from ALL and use + to set a join link.</p>
-        </div>
+        <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available H-MANHWA</h2>
+        <div id="hmanhwa-letter-bar" class="letter-bar"></div>
+        <div id="hmanhwa-groups"></div>
+        <p id="hmanhwa-empty" class="empty-note hidden">No manhwa/manga posted yet. Open a title from ALL and use + to set a join link.</p>
       </div>
     </div>
   </main>

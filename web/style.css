@@ -1238,3 +1238,28 @@ html, body {
 .sub-pill-tabs {
   margin-bottom: 16px;
 }
+
+/* H-MANHWA Ongoing / Finished sub-columns */
+.status-tabs {
+  display: flex;
+  gap: 0;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.status-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-faint);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  padding: 10px 8px 12px;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+.status-tab.active {
+  color: var(--text);
+  border-bottom-color: #fff;
+}
