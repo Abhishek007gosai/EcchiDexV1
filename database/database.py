@@ -175,6 +175,7 @@ def _to_anime(doc) -> dict | None:
     d["genres"] = d.get("genres") or []
     d["available"] = bool(d.get("join_link"))
     d["media_type"] = d.get("media_type") or "ANIME"
+    d["library_section"] = d.get("library_section")  # ongoing | finished | None
     return d
 
 
@@ -311,6 +312,7 @@ def upsert_anime(details: dict, added_by: int | None = None) -> int:
         "format": details.get("format"),
         "duration": details.get("duration"),
         "media_type": details.get("media_type") or "ANIME",
+        "library_section": details.get("library_section"),
         "countryOfOrigin": details.get("countryOfOrigin"),
         "related_ids": related_ids,
         "relations": details.get("relations", []),
@@ -426,11 +428,11 @@ def search_local(query: str, media_type: str | None = None) -> list[dict]:
     return [_to_anime(d) for d in docs]
 
 
-def update_link(anime_id: int, link: str):
-    anime_col.update_one(
-        {"_id": anime_id},
-        {"$set": {"join_link": link or None, "updated_at": time.time()}},
-    )
+def update_link(anime_id: int, link: str, library_section: str | None = None):
+    fields = {"join_link": link or None, "updated_at": time.time()}
+    if library_section in ("ongoing", "finished"):
+        fields["library_section"] = library_section
+    anime_col.update_one({"_id": anime_id}, {"$set": fields})
 
 
 def propagate_join_link(anime_id: int, link: str) -> int:
