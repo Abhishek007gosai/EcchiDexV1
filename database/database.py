@@ -145,12 +145,21 @@ def _next_id(counter_name: str) -> int:
 
 def cache_get(key: str):
     """Return cached payload or None if missing/expired."""
-    import time
+    from datetime import datetime, timezone
     doc = cache_col.find_one({"key": key})
     if not doc:
         return None
-    if doc.get("expires_at") and doc["expires_at"].timestamp() < time.time():
-        return None
+    exp = doc.get("expires_at")
+    if exp is not None:
+        try:
+            ts = exp.timestamp() if hasattr(exp, "timestamp") else float(exp)
+            # treat naive datetimes as UTC
+            if hasattr(exp, "tzinfo") and exp.tzinfo is None:
+                ts = exp.replace(tzinfo=timezone.utc).timestamp()
+            if ts < time.time():
+                return None
+        except Exception:
+            return None
     return doc.get("value")
 
 
