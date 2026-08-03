@@ -614,9 +614,9 @@ def healthz():
         SOURCES["anilist"].get_trending()
         SOURCES["anilist"].get_popular()
         SOURCES["anilist"].get_most_popular()
-        SOURCES["anilist"].get_trending_manga()
-        SOURCES["anilist"].get_airing_manga()
-        SOURCES["anilist"].get_popular_manga()
+        SOURCES["mangadex"].get_trending_manga()
+        SOURCES["mangadex"].get_airing_manga()
+        SOURCES["mangadex"].get_popular_manga()
     except Exception:
         pass
     return jsonify(status="ok")
@@ -659,7 +659,7 @@ def api_most_popular():
 def api_manga_trending():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_trending_manga(page))
+        resp = jsonify(SOURCES["mangadex"].get_trending_manga(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
     resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
@@ -670,7 +670,7 @@ def api_manga_trending():
 def api_manga_airing():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_airing_manga(page))
+        resp = jsonify(SOURCES["mangadex"].get_airing_manga(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
     resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
@@ -681,7 +681,7 @@ def api_manga_airing():
 def api_manga_popular():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["anilist"].get_popular_manga(page))
+        resp = jsonify(SOURCES["mangadex"].get_popular_manga(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
     resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
@@ -744,7 +744,7 @@ def api_search_manga():
     if not q:
         return jsonify({"results": [], "has_next": False})
     try:
-        return jsonify(SOURCES["anilist"].search_manga(q, page))
+        return jsonify(SOURCES["mangadex"].search_manga(q, page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
 
@@ -788,6 +788,56 @@ def api_anime_detail(anime_id):
         abort(404)
     anime["related_posted"] = _related_posted(anime)
     return jsonify(anime)
+
+
+
+
+@app.get("/api/source/<source>/<path:source_id>")
+def api_source_details(source, source_id):
+    """Fetch full details from any registered source (anilist / mangadex)."""
+    src = SOURCES.get(source)
+    if not src:
+        abort(404)
+    try:
+        # AniList ids are ints; MangaDex ids are UUIDs
+        sid = int(source_id) if source == "anilist" else source_id
+        details = src.get_details(sid)
+    except (requests.RequestException, ValueError, KeyError):
+        return jsonify(error="not found"), 404
+    return jsonify(details)
+
+
+@app.post("/api/anime/link-source/<source>/<path:source_id>")
+def api_set_link_from_source(source, source_id):
+    """Admin: create/update a post from any source and set its join link."""
+    user = current_user()
+    if not is_admin(user):
+        abort(403)
+    src = SOURCES.get(source)
+    if not src:
+        abort(404)
+    payload = request.get_json(force=True, silent=True) or {}
+    raw_link = (payload.get("link") or "").strip()
+    try:
+        link = normalize_join_link(raw_link)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    try:
+        sid = int(source_id) if source == "anilist" else source_id
+        details = src.get_details(sid)
+    except (requests.RequestException, ValueError, KeyError):
+        return jsonify(error="Could not fetch title metadata"), 502
+    anime_id = db.upsert_anime(details, added_by=user["id"])
+    if link:
+        db.update_link(anime_id, link)
+        try:
+            propagate_link_full_franchise(anime_id, link)
+        except Exception:
+            pass
+        db.accept_requests_for_title(details["title"])
+        return jsonify(status="updated", anime=db.get_anime(anime_id), propagated=0)
+    db.delete_anime_family(anime_id)
+    return jsonify(status="deleted", anime=None)
 
 
 @app.get("/api/anilist/<int:anilist_id>")
