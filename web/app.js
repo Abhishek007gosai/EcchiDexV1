@@ -1668,7 +1668,7 @@
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "help-link-btn";
-    btn.innerHTML = `<span class="help-link-icon">💬</span> ${escapeHtml(name)}`;
+    btn.textContent = name;
     btn.addEventListener("click", () => openExternalLink(url));
     card.appendChild(btn);
     return card;
@@ -1711,7 +1711,7 @@
         const supportBtn = document.createElement("button");
         supportBtn.type = "button";
         supportBtn.className = "profile-support-btn";
-        supportBtn.innerHTML = `<span class="help-link-icon">💬</span> Support Chat`;
+        supportBtn.textContent = "Support Chat";
         supportBtn.addEventListener("click", () => {
           if (supportUrl) {
             openExternalLink(supportUrl);
