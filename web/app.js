@@ -337,18 +337,15 @@
   function simplePosterCard(item, onOpen) {
     const card = document.createElement("div");
     card.className = "poster-card";
+
+    const art = document.createElement("div");
+    art.className = "poster-art";
     const img = document.createElement("img");
     img.loading = "lazy";
     img.src = item.poster_url || "";
     img.alt = item.title;
-    card.appendChild(img);
-
-    if (item.rating) {
-      const rating = document.createElement("span");
-      rating.className = "poster-rating";
-      rating.textContent = "\u2605 " + item.rating.toFixed(1);
-      card.appendChild(rating);
-    }
+    art.appendChild(img);
+    card.appendChild(art);
 
     const meta = document.createElement("div");
     meta.className = "poster-meta";
@@ -356,6 +353,12 @@
     title.className = "poster-title";
     title.textContent = item.title;
     meta.appendChild(title);
+    if (item.rating) {
+      const rating = document.createElement("p");
+      rating.className = "poster-rating-line";
+      rating.textContent = "\u2605 " + item.rating.toFixed(1);
+      meta.appendChild(rating);
+    }
     card.appendChild(meta);
 
     card.addEventListener("click", onOpen);
@@ -378,25 +381,21 @@
     const card = document.createElement("div");
     card.className = "poster-card";
 
+    const art = document.createElement("div");
+    art.className = "poster-art";
     const img = document.createElement("img");
     img.loading = "lazy";
     img.src = item.poster_url || "";
     img.alt = item.title;
-    card.appendChild(img);
+    art.appendChild(img);
 
     if (badgeText) {
       const badge = document.createElement("span");
       badge.className = badgeClass;
       badge.textContent = badgeText;
-      card.appendChild(badge);
+      art.appendChild(badge);
     }
-
-    if (item.rating) {
-      const rating = document.createElement("span");
-      rating.className = "poster-rating";
-      rating.textContent = "\u2605 " + item.rating.toFixed(1);
-      card.appendChild(rating);
-    }
+    card.appendChild(art);
 
     const meta = document.createElement("div");
     meta.className = "poster-meta";
@@ -404,6 +403,12 @@
     title.className = "poster-title";
     title.textContent = item.title;
     meta.appendChild(title);
+    if (item.rating) {
+      const rating = document.createElement("p");
+      rating.className = "poster-rating-line";
+      rating.textContent = "\u2605 " + item.rating.toFixed(1);
+      meta.appendChild(rating);
+    }
     if (item.genres && item.genres.length) {
       const genres = document.createElement("p");
       genres.className = "poster-genres";
