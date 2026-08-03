@@ -94,14 +94,15 @@ query ($sort: [MediaSort], $page: Int) {
 """
 
 GENRE_QUERY = """
-query ($genre: String, $page: Int) {
-  Page(page: $page, perPage: 10) {
+query ($genre: String, $page: Int, $type: MediaType) {
+  Page(page: $page, perPage: 12) {
     pageInfo { hasNextPage }
-    media(type: ANIME, isAdult: true, genre: $genre, sort: POPULARITY_DESC) {
+    media(type: $type, isAdult: true, genre: $genre, sort: POPULARITY_DESC) {
       id
       title { romaji english }
       coverImage { extraLarge large }
       averageScore
+      type
     }
   }
 }
@@ -277,7 +278,11 @@ class AniListSource(AnimeSource):
 
     def get_details(self, source_id, use_cache: bool = True) -> dict:
         if use_cache:
-            return self._cached(f"details:{source_id}", lambda: self._fetch_details(source_id))
+            return self._cached(
+                f"details:{source_id}",
+                lambda: self._fetch_details(source_id),
+                ttl=Config.CATALOG_CACHE_TTL_DETAILS,
+            )
         return self._fetch_details(source_id)
 
     def _fetch_details(self, source_id) -> dict:
@@ -342,31 +347,33 @@ class AniListSource(AnimeSource):
 
     # -- Extra: powers Home's Trending/Top Airing feeds (not part of the shared interface) --
 
-    def _cached(self, key: str, fetch):
+    def _cached(self, key: str, fetch, ttl: int | None = None):
+        """L1 memory + L2 Mongo with per-entry TTL (seconds)."""
+        key = f"al3:{key}"
+        ttl = int(ttl if ttl is not None else Config.CATALOG_CACHE_TTL)
         now = time.time()
-        # L1: process memory
         cached = self._cache.get(key)
-        if cached and now - cached[0] < Config.CATALOG_CACHE_TTL:
+        # tuple: (stored_at, value, entry_ttl)
+        if cached and now - cached[0] < (cached[2] if len(cached) > 2 else ttl):
             return cached[1]
-        # L2: MongoDB (shared across restarts / single worker)
         try:
             from database import database as db
             mongo_hit = db.cache_get(key)
             if mongo_hit is not None:
-                self._cache[key] = (now, mongo_hit)
+                self._cache[key] = (now, mongo_hit, ttl)
                 return mongo_hit
         except Exception:
             pass
         value = fetch()
-        self._cache[key] = (now, value)
+        self._cache[key] = (now, value, ttl)
         try:
             from database import database as db
-            db.cache_set(key, value)
+            db.cache_set(key, value, ttl_seconds=ttl)
         except Exception:
             pass
         return value
 
-    def _discover(self, sort: str, page: int = 1, query: str = DISCOVER_QUERY, cache_prefix: str = "") -> dict:
+    def _discover(self, sort: str, page: int = 1, query: str = DISCOVER_QUERY, cache_prefix: str = "", ttl: int | None = None) -> dict:
         def fetch():
             data = self._post(query, {"sort": [sort], "page": page})
             out = []
@@ -386,22 +393,28 @@ class AniListSource(AnimeSource):
                 })
             return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
-        return self._cached(f"{cache_prefix}{sort}:{page}", fetch)
+        return self._cached(f"{cache_prefix}{sort}:{page}", fetch, ttl=ttl)
 
     def get_trending(self, page: int = 1) -> dict:
-        return self._discover("TRENDING_DESC", page)
+        return self._discover("TRENDING_DESC", page, ttl=Config.CATALOG_CACHE_TTL_TRENDING)
 
     def get_popular(self, page: int = 1) -> dict:
         # Backs the "Top Airing" section — must only include anime that is
         # currently releasing, not just anime that is popular overall.
-        return self._discover("POPULARITY_DESC", page, query=DISCOVER_AIRING_QUERY, cache_prefix="airing:")
+        return self._discover(
+            "POPULARITY_DESC", page, query=DISCOVER_AIRING_QUERY,
+            cache_prefix="airing:", ttl=Config.CATALOG_CACHE_TTL_AIRING,
+        )
 
     def get_most_popular(self, page: int = 1) -> dict:
         # Backs the "Popular" section — most popular anime overall,
         # regardless of airing status (unlike get_popular/"Top Airing").
-        return self._discover("POPULARITY_DESC", page, cache_prefix="popular-all:")
+        return self._discover(
+            "POPULARITY_DESC", page, cache_prefix="popular-all:",
+            ttl=Config.CATALOG_CACHE_TTL_POPULAR,
+        )
 
-    def _discover_manga(self, sort: str, page: int = 1, query: str = MANGA_DISCOVER_QUERY, cache_prefix: str = "manga:") -> dict:
+    def _discover_manga(self, sort: str, page: int = 1, query: str = MANGA_DISCOVER_QUERY, cache_prefix: str = "manga:", ttl: int | None = None) -> dict:
         def fetch():
             data = self._post(query, {"sort": [sort], "page": page})
             out = []
@@ -425,7 +438,7 @@ class AniListSource(AnimeSource):
                     "media_type": "ANIME",
                 })
             return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
-        return self._cached(f"{cache_prefix}{sort}:{page}", fetch)
+        return self._cached(f"{cache_prefix}{sort}:{page}", fetch, ttl=ttl)
 
     def _merge_manga_pages(self, *pages: dict) -> dict:
         """Deduplicate adult manga/manhwa/doujin results from several queries."""
@@ -446,32 +459,40 @@ class AniListSource(AnimeSource):
         """Trending adult manga + manhwa + doujinshi (UI label stays Manga / Manhwa)."""
         def fetch():
             general = self._discover_manga(
-                "TRENDING_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="m-trend-v3:"
+                "TRENDING_DESC", page, query=MANGA_DISCOVER_QUERY,
+                cache_prefix="m-trend-v3:", ttl=Config.CATALOG_CACHE_TTL_TRENDING,
             )
-            # Also pull KR adult (pornhwa) so manhwa is not buried under JP titles
             manhwa = self._discover_manga(
-                "TRENDING_DESC", page, query=MANHWA_DISCOVER_QUERY, cache_prefix="m-trend-kr-v3:"
+                "TRENDING_DESC", page, query=MANHWA_DISCOVER_QUERY,
+                cache_prefix="m-trend-kr-v3:", ttl=Config.CATALOG_CACHE_TTL_TRENDING,
             )
             return self._merge_manga_pages(manhwa, general)
-        return self._cached(f"manga-trend-merged-v3:{page}", fetch)
+        return self._cached(
+            f"manga-trend-merged-v3:{page}", fetch, ttl=Config.CATALOG_CACHE_TTL_TRENDING
+        )
 
     def get_airing_manga(self, page: int = 1) -> dict:
         """Ongoing adult manga / manhwa / doujin — Top Airing row."""
         return self._discover_manga(
-            "POPULARITY_DESC", page, query=MANGA_AIRING_QUERY, cache_prefix="m-air-v3:"
+            "POPULARITY_DESC", page, query=MANGA_AIRING_QUERY,
+            cache_prefix="m-air-v3:", ttl=Config.CATALOG_CACHE_TTL_AIRING,
         )
 
     def get_popular_manga(self, page: int = 1) -> dict:
         """Popular adult manga + manhwa + doujinshi."""
         def fetch():
             general = self._discover_manga(
-                "POPULARITY_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="m-pop-v3:"
+                "POPULARITY_DESC", page, query=MANGA_DISCOVER_QUERY,
+                cache_prefix="m-pop-v3:", ttl=Config.CATALOG_CACHE_TTL_POPULAR,
             )
             manhwa = self._discover_manga(
-                "POPULARITY_DESC", page, query=MANHWA_DISCOVER_QUERY, cache_prefix="m-pop-kr-v3:"
+                "POPULARITY_DESC", page, query=MANHWA_DISCOVER_QUERY,
+                cache_prefix="m-pop-kr-v3:", ttl=Config.CATALOG_CACHE_TTL_POPULAR,
             )
             return self._merge_manga_pages(manhwa, general)
-        return self._cached(f"manga-pop-merged-v3:{page}", fetch)
+        return self._cached(
+            f"manga-pop-merged-v3:{page}", fetch, ttl=Config.CATALOG_CACHE_TTL_POPULAR
+        )
 
     # Back-compat aliases used by older routes
     def get_trending_manhwa(self, page: int = 1) -> dict:
@@ -501,9 +522,12 @@ class AniListSource(AnimeSource):
             })
         return {"results": results, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
-    def browse_genre(self, genre: str, page: int = 1) -> dict:
+    def browse_genre(self, genre: str, page: int = 1, media_type: str = "ANIME") -> dict:
+        """Browse adult titles in a genre. media_type: ANIME (H-ANIME) or MANGA (H-MANHWA)."""
+        media_type = "MANGA" if str(media_type).upper() == "MANGA" else "ANIME"
+
         def fetch():
-            data = self._post(GENRE_QUERY, {"genre": genre, "page": page})
+            data = self._post(GENRE_QUERY, {"genre": genre, "page": page, "type": media_type})
             out = []
             for m in data["Page"]["media"]:
                 score = m.get("averageScore")
@@ -512,7 +536,14 @@ class AniListSource(AnimeSource):
                     "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
                     "rating": round(score / 10, 1) if score else None,
                     "anilist_id": m["id"],
+                    "source": self.name,
+                    "source_id": m["id"],
+                    "media_type": media_type,
                 })
             return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
 
-        return self._cached(f"genre:{genre}:{page}", fetch)
+        return self._cached(
+            f"genre:{media_type}:{genre}:{page}",
+            fetch,
+            ttl=Config.CATALOG_CACHE_TTL_GENRE,
+        )
