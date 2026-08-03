@@ -1739,33 +1739,26 @@
       `;
       stack.appendChild(intro);
 
-      // Primary channel link buttons
-      links.forEach((l) => {
-        const name = (l.name || "Link").trim();
-        const url = (l.url || "").trim();
-        if (!name || !url) return;
-        stack.appendChild(makeHelpLinkCard(name, url));
-      });
+      // All channel links live behind MORE CHANNELS (not shown until tapped)
+      const allChannelLinks = []
+        .concat(links, moreLinks)
+        .filter((l) => (l.name || "").trim() && (l.url || "").trim());
 
-      // MORE CHANNELS — expands extra links (same button style)
-      const validMore = moreLinks.filter((l) => (l.name || "").trim() && (l.url || "").trim());
-      if (validMore.length > 0) {
+      if (allChannelLinks.length > 0) {
         const moreCard = document.createElement("div");
         moreCard.className = "help-card help-card--link";
         const moreBtn = document.createElement("button");
         moreBtn.type = "button";
         moreBtn.className = "help-link-btn help-more-btn";
-        moreBtn.innerHTML = `<span class="help-link-icon">➕</span> MORE CHANNELS`;
+        moreBtn.textContent = "MORE CHANNELS";
         const morePanel = document.createElement("div");
         morePanel.className = "more-channels-panel hidden";
-        validMore.forEach((l) => {
+        allChannelLinks.forEach((l) => {
           morePanel.appendChild(makeHelpLinkCard((l.name || "").trim(), (l.url || "").trim()));
         });
         moreBtn.addEventListener("click", () => {
-          const open = morePanel.classList.toggle("hidden");
-          moreBtn.innerHTML = open
-            ? `<span class="help-link-icon">➕</span> MORE CHANNELS`
-            : `<span class="help-link-icon">➖</span> HIDE CHANNELS`;
+          const nowHidden = morePanel.classList.toggle("hidden");
+          moreBtn.textContent = nowHidden ? "MORE CHANNELS" : "HIDE CHANNELS";
         });
         moreCard.appendChild(moreBtn);
         stack.appendChild(moreCard);
@@ -1778,9 +1771,7 @@
         const editBtn = document.createElement("button");
         editBtn.type = "button";
         editBtn.className = "edit-links-btn";
-        editBtn.innerHTML = (links.length || validMore.length)
-          ? `<span class="help-link-icon">✏️</span> Edit links`
-          : `<span class="help-link-icon">➕</span> Add links`;
+        editBtn.textContent = allChannelLinks.length ? "Edit links" : "Add links";
         editBtn.addEventListener("click", () => openHelpEdit(help));
         admin.appendChild(editBtn);
         stack.appendChild(admin);
