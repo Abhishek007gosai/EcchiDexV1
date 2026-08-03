@@ -67,6 +67,6 @@ class Config:
     ANILIST_ENDPOINT = "https://graphql.anilist.co"
 
     # Catalog cache lifetime (seconds). One TTL for all AniList feeds.
-    CATALOG_CACHE_TTL = int(os.environ.get("CATALOG_CACHE_TTL", "1800"))  # 30 min
+    CATALOG_CACHE_TTL = int(os.environ.get("CATALOG_CACHE_TTL", "60"))  # 30 min
     # Bump to wipe catalog_cache on next boot after a breaking change.
     CACHE_GENERATION = os.environ.get("CACHE_GENERATION", "3")
