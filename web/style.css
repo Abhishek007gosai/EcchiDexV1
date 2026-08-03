@@ -799,15 +799,16 @@ html, body {
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 12px 16px;
-  border: 1px solid var(--green);
+  padding: 13px 16px;
+  border: none;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--green) 12%, var(--surface-2));
-  color: var(--green);
+  background: var(--grad);
+  color: #fff;
   font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
+  box-shadow: 0 6px 18px rgba(47, 109, 52, 0.28);
 }
 .profile-support-btn:active { transform: scale(0.98); opacity: 0.95; }
 
@@ -881,19 +882,22 @@ html, body {
   text-align: center;
 }
 .edit-links-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   width: 100%;
-  padding: 12px 16px;
+  padding: 13px 16px;
   border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--green);
-  font-size: 14px;
+  border: none;
+  background: linear-gradient(90deg, #ec4899 0%, #a855f7 55%, #8b5cf6 100%);
+  color: #fff;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(168, 85, 247, 0.28);
 }
 .edit-links-btn:active { transform: scale(0.98); opacity: 0.95; }
 .help-edit-row {

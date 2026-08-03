@@ -1699,15 +1699,24 @@
         <div class="profile-row"><span class="label">Access</span><span class="value">${escapeHtml(profile.access || "active")}</span></div>
       `;
 
-      // Support Chat button directly under Access
-      if (supportUrl) {
+      // Support Chat button always under Access
+      {
         const supportWrap = document.createElement("div");
         supportWrap.className = "profile-support-wrap";
         const supportBtn = document.createElement("button");
         supportBtn.type = "button";
         supportBtn.className = "profile-support-btn";
         supportBtn.innerHTML = `<span class="help-link-icon">💬</span> Support Chat`;
-        supportBtn.addEventListener("click", () => openExternalLink(supportUrl));
+        supportBtn.addEventListener("click", () => {
+          if (supportUrl) {
+            openExternalLink(supportUrl);
+          } else if (profile && profile.role === "admin") {
+            showToast("Set Support Chat URL in Edit links first");
+            openHelpEdit(help);
+          } else {
+            showToast("Support chat is not available yet");
+          }
+        });
         supportWrap.appendChild(supportBtn);
         profileCard.appendChild(supportWrap);
       }
@@ -1769,7 +1778,9 @@
         const editBtn = document.createElement("button");
         editBtn.type = "button";
         editBtn.className = "edit-links-btn";
-        editBtn.textContent = (links.length || validMore.length) ? "Edit links" : "Add links";
+        editBtn.innerHTML = (links.length || validMore.length)
+          ? `<span class="help-link-icon">✏️</span> Edit links`
+          : `<span class="help-link-icon">➕</span> Add links`;
         editBtn.addEventListener("click", () => openHelpEdit(help));
         admin.appendChild(editBtn);
         stack.appendChild(admin);
