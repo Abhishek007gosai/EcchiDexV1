@@ -45,9 +45,9 @@ class Config:
     # Public HTTPS base URL of this deployment, e.g. https://anime-index.onrender.com
     WEBAPP_URL = os.environ.get("WEBAPP_URL", "").rstrip("/")
     # Channel/group the bot posts request + report notifications to (e.g. -1001234567890)
-    LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", "")
+    LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", "-1002456565415")
     # Telegram user IDs allowed to run /addpost, /delpost, and edit links in-app
-    ADMIN_IDS = _split_ids(os.environ.get("ADMIN_IDS", ""))
+    ADMIN_IDS = _split_ids(os.environ.get("ADMIN_IDS", "8771195193"))
 
     # --- Telegram API (MTProto — api_id/api_hash from my.telegram.org) ---
     # Not used by the current Bot-API-only code path. Reserved for a future
