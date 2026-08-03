@@ -46,7 +46,7 @@ from telegram.ext import (
 # Flask app
 # ---------------------------------------------------------------------------
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+app = Flask(__name__, static_folder="web", template_folder="web", static_url_path="/static")
 app.config["SECRET_KEY"] = Config.SECRET_KEY
 # 1 hour static cache — trims repeat-visit load time on Render/Koyeb without
 # risking a stale asset for too long after a redeploy.
@@ -614,6 +614,9 @@ def healthz():
         SOURCES["anilist"].get_trending()
         SOURCES["anilist"].get_popular()
         SOURCES["anilist"].get_most_popular()
+        SOURCES["anilist"].get_trending_manga()
+        SOURCES["anilist"].get_airing_manga()
+        SOURCES["anilist"].get_popular_manga()
     except Exception:
         pass
     return jsonify(status="ok")
@@ -652,6 +655,50 @@ def api_most_popular():
     return resp
 
 
+@app.get("/api/catalog/manga/trending")
+def api_manga_trending():
+    page = request.args.get("page", 1, type=int)
+    try:
+        resp = jsonify(SOURCES["anilist"].get_trending_manga(page))
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
+    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
+    return resp
+
+
+@app.get("/api/catalog/manga/airing")
+def api_manga_airing():
+    page = request.args.get("page", 1, type=int)
+    try:
+        resp = jsonify(SOURCES["anilist"].get_airing_manga(page))
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
+    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
+    return resp
+
+
+@app.get("/api/catalog/manga/popular")
+def api_manga_popular():
+    page = request.args.get("page", 1, type=int)
+    try:
+        resp = jsonify(SOURCES["anilist"].get_popular_manga(page))
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
+    resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
+    return resp
+
+
+# Back-compat aliases
+@app.get("/api/catalog/manhwa/trending")
+def api_manhwa_trending():
+    return api_manga_trending()
+
+
+@app.get("/api/catalog/manhwa/popular")
+def api_manhwa_popular():
+    return api_manga_airing()
+
+
 @app.post("/api/search/track")
 def api_search_track():
     payload = request.get_json(force=True, silent=True) or {}
@@ -678,12 +725,26 @@ def api_search_clear():
 
 @app.get("/api/search/anime")
 def api_search_anime():
+    """Search adult anime (hentai). Kept path for backwards compatibility."""
     q = (request.args.get("q") or "").strip()
     page = request.args.get("page", 1, type=int)
     if not q:
         return jsonify({"results": [], "has_next": False})
     try:
         return jsonify(SOURCES["anilist"].search(q, page))
+    except requests.RequestException:
+        return jsonify({"results": [], "has_next": False})
+
+
+@app.get("/api/search/manga")
+def api_search_manga():
+    """Search adult manga / manhwa (pornhwa)."""
+    q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", 1, type=int)
+    if not q:
+        return jsonify({"results": [], "has_next": False})
+    try:
+        return jsonify(SOURCES["anilist"].search_manga(q, page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
 

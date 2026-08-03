@@ -20,8 +20,8 @@ def _split_ids(raw: str) -> list[int]:
 
 class Config:
     # --- Branding ---
-    BRAND_NAME = os.environ.get("BRAND_NAME", "Anime Eternals")
-    BRAND_HANDLE = os.environ.get("BRAND_HANDLE", "ETERNALS")
+    BRAND_NAME = os.environ.get("BRAND_NAME", "H Index")
+    BRAND_HANDLE = os.environ.get("BRAND_HANDLE", "HINDEX")
     # Optional banner image shown above the /anidex welcome message
     BANNER_IMAGE_URL = os.environ.get("BANNER_IMAGE_URL", "")
 
