@@ -276,7 +276,7 @@
     return {
       match(item) {
         if (item.source_id != null || item.anilist_id != null) {
-          const src = item.source || (item.anilist_id != null ? "anilist" : "mangadex");
+          const src = item.source || "anilist";
           const sid = item.source_id ?? item.anilist_id;
           const m = byId.get(`${src}:${sid}`) || byId.get(String(sid));
           if (m) return m;
@@ -445,10 +445,7 @@
     if (tabAll) tabAll.classList.toggle("hidden", tab !== "all");
     if (tabHanime) tabHanime.classList.toggle("hidden", tab !== "hanime");
     if (tabHmanhwa) tabHmanhwa.classList.toggle("hidden", tab !== "hmanhwa");
-    if (tab === "hanime") {
-      loadHanimeDiscover();
-      renderTypeLibrary("ANIME");
-    }
+    if (tab === "hanime") renderTypeLibrary("ANIME");
     if (tab === "hmanhwa") showHmanhwaStatus(hmanhwaStatus || "ongoing");
   }
   pillTabs.forEach((b) => b.addEventListener("click", () => setPillTab(b.dataset.tab)));
@@ -746,9 +743,16 @@
     // Franchise collapse within the same media type only
     let pool = available.filter((a) => isMediaType(a, type));
     if (type === "MANGA") {
-      // Finished A–Z only lists finished titles
+      // Prefer admin-chosen library_section; fall back to AniList status
       pool = pool.filter((a) => {
+        const sec = (a.library_section || "").toLowerCase();
+        if (sec === "ongoing" || sec === "finished") {
+          return sec === hmanhwaStatus;
+        }
         const s = (a.status || "").toUpperCase();
+        if (hmanhwaStatus === "ongoing") {
+          return !s || s === "RELEASING" || s === "NOT_YET_RELEASED" || s === "HIATUS";
+        }
         return s === "FINISHED" || s === "CANCELLED";
       });
     }
@@ -1188,9 +1192,34 @@
   function openLinkSheet(anime) {
     linkTargetAnime = anime;
     linkInput.value = anime.join_link || "";
+    const picker = el("link-section-picker");
+    const hint = el("link-section-hint");
+    const isManga = (anime.media_type || "").toUpperCase() === "MANGA" || anime.source === "mangadex";
+    if (picker) picker.classList.toggle("hidden", !isManga);
+    if (hint) hint.classList.toggle("hidden", !isManga);
+    const preferred = (anime.library_section || (isManga ? "ongoing" : "") || "ongoing").toLowerCase();
+    if (picker) {
+      picker.querySelectorAll("[data-library-section]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.librarySection === preferred);
+      });
+    }
     linkOverlay.classList.remove("hidden");
     linkInput.focus();
   }
+
+  document.querySelectorAll("#link-section-picker [data-library-section]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#link-section-picker [data-library-section]").forEach((b) => {
+        b.classList.toggle("active", b === btn);
+      });
+    });
+  });
+
+  function selectedLibrarySection() {
+    const active = document.querySelector("#link-section-picker [data-library-section].active");
+    return active ? active.dataset.librarySection : "ongoing";
+  }
+
   function closeLinkSheet() {
     linkOverlay.classList.add("hidden");
     linkTargetAnime = null;
@@ -1208,7 +1237,7 @@
     try {
       let result;
       if (linkTargetAnime.id) {
-        result = await api(`/api/anime/${linkTargetAnime.id}/link`, { method: "PATCH", body: JSON.stringify({ link: value }) });
+        result = await api(`/api/anime/${linkTargetAnime.id}/link`, { method: "PATCH", body: JSON.stringify({ link: value, library_section: ((linkTargetAnime.media_type||'').toUpperCase()==='MANGA') ? selectedLibrarySection() : undefined }) });
         if (result.status === "deleted") {
           // No link = the post itself (and any related title that only
           // had this same link) was deleted from the database, not just
@@ -1231,9 +1260,13 @@
         // the library entry with the link already set in one step.
         const src = itemSource(linkTargetAnime);
         const sid = itemSourceId(linkTargetAnime);
+        const isManga = (linkTargetAnime.media_type || "").toUpperCase() === "MANGA";
         result = await api(`/api/anime/link-source/${encodeURIComponent(src)}/${encodeURIComponent(sid)}`, {
           method: "POST",
-          body: JSON.stringify({ link: value }),
+          body: JSON.stringify({
+            link: value,
+            library_section: isManga ? selectedLibrarySection() : undefined,
+          }),
         });
         const animeRow = result.anime || result;
         linkTargetAnime.id = animeRow.id;
