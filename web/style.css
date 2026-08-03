@@ -789,6 +789,28 @@ html, body {
 .profile-row .label { color: var(--text-dim); }
 .profile-row .value { font-family: inherit; }
 
+/* Support Chat button under Access */
+.profile-support-wrap {
+  margin-top: 14px;
+}
+.profile-support-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--green);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--green) 12%, var(--surface-2));
+  color: var(--green);
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.profile-support-btn:active { transform: scale(0.98); opacity: 0.95; }
+
 /* Profile help / links card */
 .help-stack {
   display: flex;
@@ -838,22 +860,42 @@ html, body {
   cursor: pointer;
   text-decoration: none;
   box-shadow: 0 6px 18px rgba(168, 85, 247, 0.28);
+  font-family: inherit;
 }
 .help-link-btn:active { transform: scale(0.98); opacity: 0.95; }
 .help-link-btn .help-link-icon { font-size: 16px; line-height: 1; }
+.help-more-btn {
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #a855f7 100%);
+  box-shadow: 0 6px 18px rgba(99, 102, 241, 0.28);
+}
+.more-channels-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.more-channels-panel.hidden {
+  display: none !important;
+}
 .help-card-admin {
-  margin-top: 12px;
+  margin-top: 4px;
   text-align: center;
 }
-.help-card-admin button {
-  background: none;
-  border: none;
-  color: var(--accent, #6ee7b7);
-  font-size: 13px;
+.edit-links-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
-  text-decoration: underline;
-  padding: 4px 8px;
+  font-family: inherit;
 }
+.edit-links-btn:active { transform: scale(0.98); opacity: 0.95; }
 .help-edit-row {
   display: flex;
   flex-direction: column;

@@ -153,14 +153,9 @@
   const hanimeTrendingRow = el("hanime-trending-row");
   const hanimePopularGrid = el("hanime-popular-grid");
   const hanimePopularMore = el("hanime-popular-more");
-  const hmanhwaOngoingEmpty = el("hmanhwa-ongoing-empty");
   const hmanhwaLetterBar = el("hmanhwa-letter-bar");
   const hmanhwaGroups = el("hmanhwa-groups");
   const hmanhwaEmpty = el("hmanhwa-empty");
-  const hmanhwaOngoingPanel = el("hmanhwa-ongoing-panel");
-  const hmanhwaFinishedPanel = el("hmanhwa-finished-panel");
-  const hmanhwaOngoingGrid = el("hmanhwa-ongoing-grid");
-  const hmanhwaOngoingMore = el("hmanhwa-ongoing-more");
 
   const navBtns = document.querySelectorAll(".nav-btn");
 
@@ -236,10 +231,6 @@
   let hanimeLetter = null;
   let hmanhwaLetter = null;
   let hmanhwaStatus = "ongoing"; // ongoing | finished
-  let ongoingManhwa = [];
-  let ongoingManhwaPage = 1;
-  let ongoingManhwaHasNext = false;
-  let ongoingManhwaLoading = false;
   let hanimeDiscTrending = [];
   let hanimeDiscPopular = [];
   let hanimeDiscPopularPage = 1;
@@ -452,21 +443,14 @@
   }
   pillTabs.forEach((b) => b.addEventListener("click", () => setPillTab(b.dataset.tab)));
 
-  // H-MANHWA status sub-tabs (Ongoing discovery / Finished A–Z)
+  // H-MANHWA status sub-tabs (Ongoing / Finished — posted titles only)
   function showHmanhwaStatus(status) {
     hmanhwaStatus = status;
+    hmanhwaLetter = null;
     document.querySelectorAll(".status-tab[data-status]").forEach((b) => {
       b.classList.toggle("active", b.dataset.status === status);
     });
-    if (hmanhwaOngoingPanel) hmanhwaOngoingPanel.classList.toggle("hidden", status !== "ongoing");
-    if (hmanhwaFinishedPanel) hmanhwaFinishedPanel.classList.toggle("hidden", status !== "finished");
-    if (status === "ongoing") {
-      if (!ongoingManhwa.length) loadOngoingManhwa();
-      else renderOngoingManhwa();
-    } else {
-      hmanhwaLetter = null;
-      renderTypeLibrary("MANGA");
-    }
+    renderTypeLibrary("MANGA");
   }
   document.querySelectorAll(".status-tab[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => showHmanhwaStatus(btn.dataset.status));
@@ -522,58 +506,6 @@
     hanimeDiscLoading = false;
   }
   if (hanimePopularMore) hanimePopularMore.addEventListener("click", loadMoreHanimePopular);
-
-  function renderOngoingManhwa() {
-    if (!hmanhwaOngoingGrid) return;
-    hmanhwaOngoingGrid.innerHTML = "";
-    const availIndex = buildAvailableIndex();
-    ongoingManhwa.forEach((item) => {
-      const matched = availIndex.match(item);
-      item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
-      hmanhwaOngoingGrid.appendChild(posterScrollCard(item, () => openDiscoverDetail(item)));
-    });
-    if (hmanhwaOngoingMore) hmanhwaOngoingMore.classList.toggle("hidden", !ongoingManhwaHasNext);
-  }
-
-  async function loadOngoingManhwa() {
-    if (ongoingManhwaLoading) return;
-    ongoingManhwaLoading = true;
-    if (hmanhwaOngoingEmpty) hmanhwaOngoingEmpty.classList.add("hidden");
-    renderSkeletonRow(hmanhwaOngoingGrid, 6);
-    const data = await safeApi("/api/catalog/manga/airing");
-    ongoingManhwa = data.results || [];
-    ongoingManhwaHasNext = !!data.has_next;
-    ongoingManhwaPage = 1;
-    renderOngoingManhwa();
-    if (!ongoingManhwa.length && hmanhwaOngoingEmpty) {
-      hmanhwaOngoingEmpty.classList.remove("hidden");
-    }
-    ongoingManhwaLoading = false;
-  }
-
-  async function loadMoreOngoingManhwa() {
-    if (ongoingManhwaLoading || !ongoingManhwaHasNext) return;
-    ongoingManhwaLoading = true;
-    if (hmanhwaOngoingMore) {
-      hmanhwaOngoingMore.disabled = true;
-      hmanhwaOngoingMore.textContent = "Loading…";
-    }
-    try {
-      const data = await api(`/api/catalog/manga/airing?page=${ongoingManhwaPage + 1}`);
-      ongoingManhwaPage += 1;
-      ongoingManhwa = ongoingManhwa.concat(data.results || []);
-      ongoingManhwaHasNext = !!data.has_next;
-      renderOngoingManhwa();
-    } catch (err) {
-      showToast("Couldn't load more right now.");
-    }
-    if (hmanhwaOngoingMore) {
-      hmanhwaOngoingMore.disabled = false;
-      hmanhwaOngoingMore.textContent = "Load more";
-    }
-    ongoingManhwaLoading = false;
-  }
-  if (hmanhwaOngoingMore) hmanhwaOngoingMore.addEventListener("click", loadMoreOngoingManhwa);
 
   // ---------------------------------------------------------------------
   // ALL tab — dual feeds (hentai vs manga/manhwa shown separately)
@@ -1723,17 +1655,41 @@
     return (name || "?").trim().charAt(0).toUpperCase();
   }
 
+  function openExternalLink(url) {
+    if (!url) return;
+    if (tg && tg.openTelegramLink && /t\.me\//i.test(url)) tg.openTelegramLink(url);
+    else if (tg && tg.openLink) tg.openLink(url);
+    else window.open(url, "_blank");
+  }
+
+  function makeHelpLinkCard(name, url) {
+    const card = document.createElement("div");
+    card.className = "help-card help-card--link";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "help-link-btn";
+    btn.innerHTML = `<span class="help-link-icon">💬</span> ${escapeHtml(name)}`;
+    btn.addEventListener("click", () => openExternalLink(url));
+    card.appendChild(btn);
+    return card;
+  }
+
   async function openProfile() {
     profileCard.innerHTML = `<p class="profile-hint">Loading profile…</p>`;
     try {
       profile = await api("/api/profile");
-      const help = await safeApi("/api/profile/help", { title: "Need help?", text: "", links: [] });
+      const help = await safeApi("/api/profile/help", {
+        title: "Need help?", text: "", links: [], more_links: [], support_chat_url: "",
+      });
       const displayName = profile.first_name || profile.username || "User";
       const photoUrl = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
       const avatarHtml = photoUrl
         ? `<img class="profile-avatar profile-avatar-img" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(displayName)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className: 'profile-avatar', textContent: '${initials(displayName)}'}))" />`
         : `<div class="profile-avatar">${initials(displayName)}</div>`;
       const links = Array.isArray(help.links) ? help.links : [];
+      const moreLinks = Array.isArray(help.more_links) ? help.more_links : [];
+      const supportUrl = (help.support_chat_url || "").trim();
+
       profileCard.innerHTML = `
         <div class="profile-header">
           ${avatarHtml}
@@ -1747,6 +1703,19 @@
         <div class="profile-row"><span class="label">Role</span><span class="value">${escapeHtml(profile.role)}</span></div>
         <div class="profile-row"><span class="label">Access</span><span class="value">${escapeHtml(profile.access || "active")}</span></div>
       `;
+
+      // Support Chat button directly under Access
+      if (supportUrl) {
+        const supportWrap = document.createElement("div");
+        supportWrap.className = "profile-support-wrap";
+        const supportBtn = document.createElement("button");
+        supportBtn.type = "button";
+        supportBtn.className = "profile-support-btn";
+        supportBtn.innerHTML = `<span class="help-link-icon">💬</span> Support Chat`;
+        supportBtn.addEventListener("click", () => openExternalLink(supportUrl));
+        supportWrap.appendChild(supportBtn);
+        profileCard.appendChild(supportWrap);
+      }
 
       // Remove previous help stack
       const parent = profileCard.parentElement;
@@ -1766,32 +1735,46 @@
       `;
       stack.appendChild(intro);
 
-      // One full card UI per link (same design as the screenshot button)
+      // Primary channel link buttons
       links.forEach((l) => {
         const name = (l.name || "Link").trim();
         const url = (l.url || "").trim();
         if (!name || !url) return;
-        const card = document.createElement("div");
-        card.className = "help-card help-card--link";
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "help-link-btn";
-        btn.innerHTML = `<span class="help-link-icon">💬</span> ${escapeHtml(name)}`;
-        btn.addEventListener("click", () => {
-          if (tg && tg.openTelegramLink && /t\.me\//i.test(url)) tg.openTelegramLink(url);
-          else if (tg && tg.openLink) tg.openLink(url);
-          else window.open(url, "_blank");
-        });
-        card.appendChild(btn);
-        stack.appendChild(card);
+        stack.appendChild(makeHelpLinkCard(name, url));
       });
+
+      // MORE CHANNELS — expands extra links (same button style)
+      const validMore = moreLinks.filter((l) => (l.name || "").trim() && (l.url || "").trim());
+      if (validMore.length > 0) {
+        const moreCard = document.createElement("div");
+        moreCard.className = "help-card help-card--link";
+        const moreBtn = document.createElement("button");
+        moreBtn.type = "button";
+        moreBtn.className = "help-link-btn help-more-btn";
+        moreBtn.innerHTML = `<span class="help-link-icon">➕</span> MORE CHANNELS`;
+        const morePanel = document.createElement("div");
+        morePanel.className = "more-channels-panel hidden";
+        validMore.forEach((l) => {
+          morePanel.appendChild(makeHelpLinkCard((l.name || "").trim(), (l.url || "").trim()));
+        });
+        moreBtn.addEventListener("click", () => {
+          const open = morePanel.classList.toggle("hidden");
+          moreBtn.innerHTML = open
+            ? `<span class="help-link-icon">➕</span> MORE CHANNELS`
+            : `<span class="help-link-icon">➖</span> HIDE CHANNELS`;
+        });
+        moreCard.appendChild(moreBtn);
+        stack.appendChild(moreCard);
+        stack.appendChild(morePanel);
+      }
 
       if (profile.role === "admin") {
         const admin = document.createElement("div");
         admin.className = "help-card-admin";
         const editBtn = document.createElement("button");
         editBtn.type = "button";
-        editBtn.textContent = links.length ? "Edit links" : "Add links";
+        editBtn.className = "edit-links-btn";
+        editBtn.textContent = (links.length || validMore.length) ? "Edit links" : "Add links";
         editBtn.addEventListener("click", () => openHelpEdit(help));
         admin.appendChild(editBtn);
         stack.appendChild(admin);
@@ -1815,6 +1798,14 @@
       ? help.links
       : [{ name: "", url: "" }, { name: "", url: "" }];
     links.forEach((l) => box.appendChild(helpEditRow(l.name || "", l.url || "")));
+    const moreBox = el("help-edit-more-links");
+    if (moreBox) {
+      moreBox.innerHTML = "";
+      const moreLinks = (help.more_links && help.more_links.length)
+        ? help.more_links
+        : [{ name: "", url: "" }];
+      moreLinks.forEach((l) => moreBox.appendChild(helpEditRow(l.name || "", l.url || "")));
+    }
     overlay.classList.remove("hidden");
   }
 
@@ -1837,6 +1828,18 @@
     if (overlay) overlay.classList.add("hidden");
   }
 
+  function collectLinkRows(containerId) {
+    const out = [];
+    const box = el(containerId);
+    if (!box) return out;
+    box.querySelectorAll(".help-edit-row").forEach((row) => {
+      const name = row.querySelector(".help-edit-name").value.trim();
+      const url = row.querySelector(".help-edit-url").value.trim();
+      if (name && url) out.push({ name, url });
+    });
+    return out;
+  }
+
   (function wireHelpEdit() {
     const overlay = el("help-edit-overlay");
     if (!overlay) return;
@@ -1845,19 +1848,21 @@
     el("help-edit-add").addEventListener("click", () => {
       el("help-edit-links").appendChild(helpEditRow("", ""));
     });
+    const addMore = el("help-edit-add-more");
+    if (addMore) {
+      addMore.addEventListener("click", () => {
+        el("help-edit-more-links").appendChild(helpEditRow("", ""));
+      });
+    }
     el("help-edit-save").addEventListener("click", async () => {
       const title = el("help-edit-title").value.trim();
       const text = el("help-edit-text").value.trim();
-      const links = [];
-      el("help-edit-links").querySelectorAll(".help-edit-row").forEach((row) => {
-        const name = row.querySelector(".help-edit-name").value.trim();
-        const url = row.querySelector(".help-edit-url").value.trim();
-        if (name && url) links.push({ name, url });
-      });
+      const links = collectLinkRows("help-edit-links");
+      const more_links = collectLinkRows("help-edit-more-links");
       try {
         await api("/api/profile/help", {
           method: "PUT",
-          body: JSON.stringify({ title, text, links }),
+          body: JSON.stringify({ title, text, links, more_links }),
         });
         closeHelpEdit();
         showToast("Profile links saved");
@@ -1981,8 +1986,7 @@
     if (tabAll && !tabAll.classList.contains("hidden")) renderAllTab();
     if (tabHanime && !tabHanime.classList.contains("hidden")) renderTypeLibrary("ANIME");
     if (tabHmanhwa && !tabHmanhwa.classList.contains("hidden")) {
-      if (hmanhwaStatus === "ongoing") renderOngoingManhwa();
-      else renderTypeLibrary("MANGA");
+      renderTypeLibrary("MANGA");
     }
   }
 
