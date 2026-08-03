@@ -107,12 +107,18 @@ query ($genre: String, $page: Int) {
 }
 """
 
-# Adult manga / manhwa (HMANHWA tab). Manhwa = Korean origin manga on AniList.
+# Adult manga / manhwa / doujinshi (pornhwa). Labels in the UI stay
+# "Manga / Manhwa" — content includes ONE_SHOT (doujin) + KR manhwa + manga.
 MANGA_DISCOVER_QUERY = """
 query ($sort: [MediaSort], $page: Int) {
-  Page(page: $page, perPage: 10) {
+  Page(page: $page, perPage: 12) {
     pageInfo { hasNextPage }
-    media(type: MANGA, isAdult: true, sort: $sort) {
+    media(
+      type: MANGA
+      isAdult: true
+      format_in: [MANGA, ONE_SHOT, NOVEL]
+      sort: $sort
+    ) {
       id
       title { romaji english }
       coverImage { extraLarge large }
@@ -129,9 +135,15 @@ query ($sort: [MediaSort], $page: Int) {
 
 MANHWA_DISCOVER_QUERY = """
 query ($sort: [MediaSort], $page: Int) {
-  Page(page: $page, perPage: 10) {
+  Page(page: $page, perPage: 12) {
     pageInfo { hasNextPage }
-    media(type: MANGA, isAdult: true, countryOfOrigin: KR, sort: $sort) {
+    media(
+      type: MANGA
+      isAdult: true
+      countryOfOrigin: KR
+      format_in: [MANGA, ONE_SHOT]
+      sort: $sort
+    ) {
       id
       title { romaji english }
       coverImage { extraLarge large }
@@ -146,12 +158,18 @@ query ($sort: [MediaSort], $page: Int) {
 }
 """
 
-# Ongoing adult manga/manhwa (status RELEASING) — "Top Airing" on HMANHWA
+# Ongoing adult manga / manhwa / doujin (status RELEASING)
 MANGA_AIRING_QUERY = """
 query ($sort: [MediaSort], $page: Int) {
-  Page(page: $page, perPage: 10) {
+  Page(page: $page, perPage: 12) {
     pageInfo { hasNextPage }
-    media(type: MANGA, isAdult: true, status: RELEASING, sort: $sort) {
+    media(
+      type: MANGA
+      isAdult: true
+      status: RELEASING
+      format_in: [MANGA, ONE_SHOT, NOVEL]
+      sort: $sort
+    ) {
       id
       title { romaji english }
       coverImage { extraLarge large }
@@ -170,7 +188,13 @@ MANGA_SEARCH_QUERY = """
 query ($search: String, $page: Int) {
   Page(page: $page, perPage: 15) {
     pageInfo { hasNextPage }
-    media(search: $search, type: MANGA, isAdult: true, sort: SEARCH_MATCH) {
+    media(
+      search: $search
+      type: MANGA
+      isAdult: true
+      format_in: [MANGA, ONE_SHOT, NOVEL]
+      sort: SEARCH_MATCH
+    ) {
       id
       title { romaji english }
       startDate { year }
@@ -388,6 +412,8 @@ class AniListSource(AnimeSource):
                     "poster_url": (m.get("coverImage") or {}).get("extraLarge") or (m.get("coverImage") or {}).get("large"),
                     "rating": round(score / 10, 1) if score else None,
                     "anilist_id": m["id"],
+                    "source": self.name,
+                    "source_id": m["id"],
                     "genres": (m.get("genres") or [])[:3],
                     "chapters": m.get("chapters"),
                     "format": m.get("format"),
@@ -401,17 +427,51 @@ class AniListSource(AnimeSource):
             return {"results": out, "has_next": data["Page"]["pageInfo"]["hasNextPage"]}
         return self._cached(f"{cache_prefix}{sort}:{page}", fetch)
 
+    def _merge_manga_pages(self, *pages: dict) -> dict:
+        """Deduplicate adult manga/manhwa/doujin results from several queries."""
+        seen = set()
+        out = []
+        has_next = False
+        for page in pages:
+            has_next = has_next or bool(page.get("has_next"))
+            for item in page.get("results") or []:
+                sid = item.get("source_id") or item.get("anilist_id")
+                if sid in seen:
+                    continue
+                seen.add(sid)
+                out.append(item)
+        return {"results": out, "has_next": has_next}
+
     def get_trending_manga(self, page: int = 1) -> dict:
-        """Trending adult manga/manhwa for HMANHWA."""
-        return self._discover_manga("TRENDING_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="manga-trend:")
+        """Trending adult manga + manhwa + doujinshi (UI label stays Manga / Manhwa)."""
+        def fetch():
+            general = self._discover_manga(
+                "TRENDING_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="m-trend-v2:"
+            )
+            # Also pull KR adult (pornhwa) so manhwa is not buried under JP titles
+            manhwa = self._discover_manga(
+                "TRENDING_DESC", page, query=MANHWA_DISCOVER_QUERY, cache_prefix="m-trend-kr-v2:"
+            )
+            return self._merge_manga_pages(manhwa, general)
+        return self._cached(f"manga-trend-merged-v2:{page}", fetch)
 
     def get_airing_manga(self, page: int = 1) -> dict:
-        """Ongoing (RELEASING) adult manga/manhwa — Top Airing on HMANHWA."""
-        return self._discover_manga("POPULARITY_DESC", page, query=MANGA_AIRING_QUERY, cache_prefix="manga-air:")
+        """Ongoing adult manga / manhwa / doujin — Top Airing row."""
+        return self._discover_manga(
+            "POPULARITY_DESC", page, query=MANGA_AIRING_QUERY, cache_prefix="m-air-v2:"
+        )
 
     def get_popular_manga(self, page: int = 1) -> dict:
-        """Most popular adult manga/manhwa overall."""
-        return self._discover_manga("POPULARITY_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="manga-all:")
+        """Popular adult manga + manhwa + doujinshi."""
+        def fetch():
+            general = self._discover_manga(
+                "POPULARITY_DESC", page, query=MANGA_DISCOVER_QUERY, cache_prefix="m-pop-v2:"
+            )
+            manhwa = self._discover_manga(
+                "POPULARITY_DESC", page, query=MANHWA_DISCOVER_QUERY, cache_prefix="m-pop-kr-v2:"
+            )
+            return self._merge_manga_pages(manhwa, general)
+        return self._cached(f"manga-pop-merged-v2:{page}", fetch)
 
     # Back-compat aliases used by older routes
     def get_trending_manhwa(self, page: int = 1) -> dict:

@@ -54,13 +54,20 @@ def _description(attrs: dict) -> str:
 
 
 def _cover_url(manga_id: str, relationships: list) -> str | None:
+    """Return a same-origin proxy URL so Telegram WebView can load covers.
+
+    Direct uploads.mangadex.org links often fail inside Telegram (hotlink /
+    CDN blocks), which is why cards showed the MangaDex placeholder page.
+    """
     for rel in relationships or []:
         if rel.get("type") != "cover_art":
             continue
         file_name = (rel.get("attributes") or {}).get("fileName")
         if file_name:
-            # .256.jpg is a small derivative — fast to load on mobile
-            return f"{COVERS}/{manga_id}/{file_name}.256.jpg"
+            # Prefer 512px derivative when available; proxy strips need for CORS
+            remote = f"{COVERS}/{manga_id}/{file_name}.512.jpg"
+            from urllib.parse import quote
+            return f"/api/img?u={quote(remote, safe='')}"
     return None
 
 
@@ -104,7 +111,7 @@ class MangaDexSource(AnimeSource):
             return hit[1]
         try:
             from database import database as db
-            mongo_hit = db.cache_get(f"md:{key}")
+            mongo_hit = db.cache_get(f"md2:{key}")
             if mongo_hit is not None:
                 self._cache[key] = (now, mongo_hit)
                 return mongo_hit
@@ -114,7 +121,7 @@ class MangaDexSource(AnimeSource):
         self._cache[key] = (now, value)
         try:
             from database import database as db
-            db.cache_set(f"md:{key}", value)
+            db.cache_set(f"md2:{key}", value)
         except Exception:
             pass
         return value
