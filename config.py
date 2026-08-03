@@ -26,7 +26,7 @@ class Config:
     BANNER_IMAGE_URL = os.environ.get("BANNER_IMAGE_URL", "")
     # Support chat link shown as a button under Access on the Profile page
     # (e.g. https://t.me/your_support_bot or https://t.me/username)
-    SUPPORT_CHAT_URL = os.environ.get("SUPPORT_CHAT_URL", "https://t.me/EternalsHelplineBot").strip()
+    SUPPORT_CHAT_URL = os.environ.get("SUPPORT_CHAT_URL", "").strip()
 
     # /anidex welcome message. Supports {first_name} and {brand_name}
     # placeholders, filled in when the command runs. Uses Telegram
@@ -67,6 +67,6 @@ class Config:
     ANILIST_ENDPOINT = "https://graphql.anilist.co"
 
     # Catalog cache lifetime (seconds). One TTL for all AniList feeds.
-    CATALOG_CACHE_TTL = int(os.environ.get("CATALOG_CACHE_TTL", "60"))  # 30 min
+    CATALOG_CACHE_TTL = int(os.environ.get("CATALOG_CACHE_TTL", "1800"))  # 30 min
     # Bump to wipe catalog_cache on next boot after a breaking change.
     CACHE_GENERATION = os.environ.get("CACHE_GENERATION", "3")
