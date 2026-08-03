@@ -64,8 +64,8 @@ class Config:
 
     # --- Database (MongoDB) ---
     # Full connection string, e.g. mongodb+srv://user:pass@cluster.mongodb.net
-    MONGODB_URL = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
-    MONGODB_NAME = os.environ.get("MONGODB_NAME", "anime_index")
+    MONGODB_URL = os.environ.get("MONGODB_URL", "")
+    MONGODB_NAME = os.environ.get("MONGODB_NAME", "cluster0")
 
     # --- External metadata sources ---
     ANILIST_ENDPOINT = "https://graphql.anilist.co"
