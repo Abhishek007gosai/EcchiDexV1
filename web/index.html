@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#131310" />
   <title>{{ brand_name }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=17" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=18" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body data-brand="{{ brand_name }}">
@@ -147,7 +147,12 @@
       <button class="back-btn" data-back="search">&#8249; back</button>
       <span class="subview-title" id="genre-view-title">Genre</span>
     </div>
+    <div class="pill-tabs genre-type-tabs" style="margin: 0 16px 12px;">
+      <button class="pill-tab active" type="button" data-genre-type="ANIME">H-ANIME</button>
+      <button class="pill-tab" type="button" data-genre-type="MANGA">H-MANHWA</button>
+    </div>
     <div id="genre-browse-grid" class="grid-2"></div>
+    <button id="genre-load-more" class="load-more-btn hidden" type="button">Load more</button>
   </section>
 
   <!-- ===================== Profile view ===================== -->
@@ -265,6 +270,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=17"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=18"></script>
 </body>
 </html>

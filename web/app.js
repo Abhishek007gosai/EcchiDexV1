@@ -126,6 +126,8 @@
   const genreTileGrid = el("genre-tile-grid");
   const genreBrowseGrid = el("genre-browse-grid");
   const genreViewTitle = el("genre-view-title");
+  const genreLoadMore = el("genre-load-more");
+  let genreType = "ANIME"; // ANIME | MANGA
 
   const pillTabs = document.querySelectorAll(".pill-tab[data-tab]");
   const tabAll = el("tab-all");
@@ -1622,32 +1624,77 @@
     genreViewName = genre;
     genrePage = 1;
     genreHasNext = false;
+    genreType = "ANIME";
     genreViewTitle.textContent = genre;
-    genreBrowseGrid.innerHTML = "";
+    document.querySelectorAll("[data-genre-type]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.genreType === genreType);
+    });
+    await loadGenreGrid(true);
+  }
+
+  async function loadGenreGrid(reset) {
+    if (!genreViewName) return;
+    if (reset) {
+      genrePage = 1;
+      genreHasNext = false;
+      if (genreBrowseGrid) genreBrowseGrid.innerHTML = "";
+    }
+    if (genreLoadMore) {
+      genreLoadMore.disabled = true;
+      genreLoadMore.textContent = "Loading…";
+      genreLoadMore.classList.remove("hidden");
+    }
     try {
-      const data = await api(`/api/genres/${encodeURIComponent(genre)}?page=1`);
+      const data = await api(
+        `/api/genres/${encodeURIComponent(genreViewName)}?page=${genrePage}&type=${encodeURIComponent(genreType)}`
+      );
       genreHasNext = !!data.has_next;
-      data.results.forEach((item) => {
+      const availIndex = buildAvailableIndex();
+      (data.results || []).forEach((item) => {
+        const matched = availIndex.match(item);
+        item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
         genreBrowseGrid.appendChild(simplePosterCard(item, () => openGenreItemDetail(item)));
       });
+      if (!(data.results || []).length && reset) {
+        const p = document.createElement("p");
+        p.className = "empty-note";
+        p.style.padding = "24px 8px";
+        p.textContent = genreType === "MANGA"
+          ? "No H-MANHWA found in this genre."
+          : "No H-ANIME found in this genre.";
+        genreBrowseGrid.appendChild(p);
+      }
     } catch (err) {
       showToast("Couldn't load that genre right now.");
+    }
+    if (genreLoadMore) {
+      genreLoadMore.disabled = false;
+      genreLoadMore.textContent = "Load more";
+      genreLoadMore.classList.toggle("hidden", !genreHasNext);
     }
   }
 
   async function loadMoreGenre() {
     if (genreLoading || !genreHasNext || !genreViewName) return;
     genreLoading = true;
-    try {
-      const data = await api(`/api/genres/${encodeURIComponent(genreViewName)}?page=${genrePage + 1}`);
-      genrePage += 1;
-      genreHasNext = !!data.has_next;
-      data.results.forEach((item) => {
-        genreBrowseGrid.appendChild(simplePosterCard(item, () => openGenreItemDetail(item)));
-      });
-    } catch (err) { /* stop silently, user can keep scrolling to retry */ }
+    genrePage += 1;
+    await loadGenreGrid(false);
     genreLoading = false;
   }
+
+  document.querySelectorAll("[data-genre-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.dataset.genreType;
+      if (!next || next === genreType) return;
+      genreType = next;
+      document.querySelectorAll("[data-genre-type]").forEach((b) => {
+        b.classList.toggle("active", b === btn);
+      });
+      loadGenreGrid(true);
+    });
+  });
+  if (genreLoadMore) genreLoadMore.addEventListener("click", loadMoreGenre);
+
 
   window.addEventListener("scroll", debounce(() => {
     if (genreView.classList.contains("hidden")) return;
