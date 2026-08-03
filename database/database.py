@@ -13,7 +13,7 @@ plain keys (anime "id", not "_id"), lists for genres, etc.
 import time
 
 from pymongo import ASCENDING, DESCENDING, MongoClient
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from config import Config
 
@@ -32,103 +32,95 @@ cache_col = _db["catalog_cache"]
 def init_db():
     """Create indexes matched to real query shapes.
 
-    Safe to call on every startup — create_index is a no-op when the
-    same spec already exists. Compound indexes are ordered equality-first,
-    then range/sort fields, so a single index can serve multiple filters.
+    Safe on every startup, including databases that already have the old
+    auto-named indexes (e.g. source_1_source_id_1). MongoDB raises code 85
+    when the same key pattern exists under a different name — we ignore
+    that and keep booting.
     """
-    # ---- anime (catalog / available / franchise) ----
-    # Unique identity for AniList (and any future source) posts
-    anime_col.create_index(
+    def _ensure(coll, keys, **kwargs):
+        try:
+            coll.create_index(keys, **kwargs)
+        except OperationFailure as e:
+            # 85 IndexOptionsConflict — same keys, different name/options
+            # 86 IndexKeySpecsConflict — incompatible options on same name
+            if getattr(e, "code", None) in (85, 86):
+                return
+            raise
+
+    # ---- anime ----
+    _ensure(
+        anime_col,
         [("source", ASCENDING), ("source_id", ASCENDING)],
         unique=True,
         name="anime_source_id_unique",
     )
-    # A–Z library listing (case-insensitive English collation, same as queries)
-    anime_col.create_index(
+    _ensure(
+        anime_col,
         [("title", ASCENDING)],
         name="anime_title",
         collation={"locale": "en", "strength": 2},
     )
-    # H-ANIME / H-MANHWA tabs: filter by type then sort by title
-    anime_col.create_index(
+    _ensure(
+        anime_col,
         [("media_type", ASCENDING), ("title", ASCENDING)],
         name="anime_type_title",
         collation={"locale": "en", "strength": 2},
     )
-    # Finished / Ongoing manhwa library filters
-    anime_col.create_index(
+    _ensure(
+        anime_col,
         [("media_type", ASCENDING), ("status", ASCENDING), ("title", ASCENDING)],
         name="anime_type_status_title",
         collation={"locale": "en", "strength": 2},
     )
-    # Franchise link inheritance: find any family member that already has a link
-    anime_col.create_index(
+    _ensure(
+        anime_col,
         [("source", ASCENDING), ("join_link", ASCENDING)],
         name="anime_source_join_link",
     )
-    # Fast lookup of linked-only titles (Available feeds)
-    anime_col.create_index(
+    _ensure(
+        anime_col,
         [("join_link", ASCENDING)],
         name="anime_join_link",
         sparse=True,
     )
-    # Franchise walk by related_ids (members of a family)
-    anime_col.create_index(
+    _ensure(
+        anime_col,
         [("source", ASCENDING), ("related_ids", ASCENDING)],
         name="anime_source_related",
         sparse=True,
     )
 
-    # ---- requests (request flow + notification bell) ----
-    # One pending/resolved row per (title-key, user)
-    requests_col.create_index(
-        [("key", ASCENDING), ("requested_by", ASCENDING)],
-        name="req_key_user",
-    )
-    # Admin pending queue + TTL cleanup of stale pending rows
-    requests_col.create_index(
-        [("status", ASCENDING), ("created_at", ASCENDING)],
-        name="req_status_created",
-    )
-    # Accept/reject-by-title: all pending for a key
-    requests_col.create_index(
-        [("key", ASCENDING), ("status", ASCENDING)],
-        name="req_key_status",
-    )
-    # Per-user pending count (rate limit)
-    requests_col.create_index(
-        [("requested_by", ASCENDING), ("status", ASCENDING)],
-        name="req_user_status",
-    )
-    # Notification bell: user's resolved requests in the last 24h, newest first
-    requests_col.create_index(
+    # ---- requests ----
+    _ensure(requests_col, [("key", ASCENDING), ("requested_by", ASCENDING)], name="req_key_user")
+    _ensure(requests_col, [("status", ASCENDING), ("created_at", ASCENDING)], name="req_status_created")
+    _ensure(requests_col, [("key", ASCENDING), ("status", ASCENDING)], name="req_key_status")
+    _ensure(requests_col, [("requested_by", ASCENDING), ("status", ASCENDING)], name="req_user_status")
+    _ensure(
+        requests_col,
         [("requested_by", ASCENDING), ("status", ASCENDING), ("responded_at", ASCENDING)],
         name="req_user_status_responded",
     )
-    # Unseen badge count
-    requests_col.create_index(
+    _ensure(
+        requests_col,
         [("requested_by", ASCENDING), ("seen", ASCENDING), ("responded_at", ASCENDING)],
         name="req_user_seen_responded",
     )
 
-    # ---- popular searches (_id is the normalized query string) ----
-    searches_col.create_index([("count", DESCENDING)], name="searches_count_desc")
+    # ---- searches / reports / users ----
+    _ensure(searches_col, [("count", DESCENDING)], name="searches_count_desc")
+    _ensure(reports_col, [("created_at", DESCENDING)], name="reports_created")
+    _ensure(reports_col, [("anime_id", ASCENDING)], name="reports_anime", sparse=True)
+    _ensure(users_col, [("role", ASCENDING)], name="users_role", sparse=True)
 
-    # ---- reports (admin log / audit) ----
-    reports_col.create_index([("created_at", DESCENDING)], name="reports_created")
-    reports_col.create_index([("anime_id", ASCENDING)], name="reports_anime", sparse=True)
-
-    # ---- users ----
-    users_col.create_index([("role", ASCENDING)], name="users_role", sparse=True)
-
-    # ---- catalog_cache (AniList response cache) ----
-    cache_col.create_index([("key", ASCENDING)], unique=True, name="cache_key_unique")
-    # TTL: Mongo deletes the doc when expires_at is reached
-    cache_col.create_index(
+    # ---- catalog_cache ----
+    _ensure(cache_col, [("key", ASCENDING)], unique=True, name="cache_key_unique")
+    _ensure(
+        cache_col,
         [("expires_at", ASCENDING)],
         expireAfterSeconds=0,
         name="cache_ttl",
     )
+
 
 
 def _next_id(counter_name: str) -> int:
