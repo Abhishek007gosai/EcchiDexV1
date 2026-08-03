@@ -759,3 +759,62 @@ def get_popular_searches(limit: int = 6) -> list[dict]:
 def clear_popular_searches() -> None:
     searches_col.delete_many({})
 
+
+
+# ---------------------------------------------------------------------------
+# App settings (profile links, etc.)
+# ---------------------------------------------------------------------------
+
+def get_profile_links() -> list[dict]:
+    """Profile help-card links — only from Mongo (edited in the mini app)."""
+    doc = counters_col.find_one({"_id": "profile_links"})
+    if not doc or not isinstance(doc.get("links"), list):
+        return []
+    out = []
+    for item in doc["links"]:
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or "").strip()
+        url = (item.get("url") or "").strip()
+        if name and url:
+            out.append({"name": name, "url": url})
+    return out
+
+
+def set_profile_links(links: list[dict]) -> list[dict]:
+    clean = []
+    for item in links or []:
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or "").strip()
+        url = (item.get("url") or "").strip()
+        if name and url:
+            clean.append({"name": name, "url": url})
+    counters_col.update_one(
+        {"_id": "profile_links"},
+        {"$set": {"links": clean, "updated_at": time.time()}},
+        upsert=True,
+    )
+    return clean
+
+
+def get_profile_help() -> dict:
+    """Title/text/links for Profile help cards. All editable in mini app."""
+    doc = counters_col.find_one({"_id": "profile_help"}) or {}
+    title = (doc.get("title") or "").strip() or "Need help?"
+    text = (doc.get("text") or "").strip() or (
+        "Notifications, requests, and channel links are all managed through the bot."
+    )
+    return {"title": title, "text": text, "links": get_profile_links()}
+
+
+def set_profile_help(title: str | None = None, text: str | None = None) -> dict:
+    fields = {}
+    if title is not None:
+        fields["title"] = (title or "").strip() or None
+    if text is not None:
+        fields["text"] = (text or "").strip() or None
+    if fields:
+        fields["updated_at"] = time.time()
+        counters_col.update_one({"_id": "profile_help"}, {"$set": fields}, upsert=True)
+    return get_profile_help()
