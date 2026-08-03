@@ -142,6 +142,10 @@
   const hmanhwaLetterBar = el("hmanhwa-letter-bar");
   const hmanhwaGroups = el("hmanhwa-groups");
   const hmanhwaEmpty = el("hmanhwa-empty");
+  const hmanhwaOngoingPanel = el("hmanhwa-ongoing-panel");
+  const hmanhwaFinishedPanel = el("hmanhwa-finished-panel");
+  const hmanhwaOngoingGrid = el("hmanhwa-ongoing-grid");
+  const hmanhwaOngoingMore = el("hmanhwa-ongoing-more");
 
   const navBtns = document.querySelectorAll(".nav-btn");
 
@@ -217,6 +221,10 @@
   let hanimeLetter = null;
   let hmanhwaLetter = null;
   let hmanhwaStatus = "ongoing"; // ongoing | finished
+  let ongoingManhwa = [];
+  let ongoingManhwaPage = 1;
+  let ongoingManhwaHasNext = false;
+  let ongoingManhwaLoading = false;
 
   const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
   // "#" comes first, same convention as Spotify/Apple Music/contacts apps,
@@ -417,23 +425,82 @@
     if (tabHanime) tabHanime.classList.toggle("hidden", tab !== "hanime");
     if (tabHmanhwa) tabHmanhwa.classList.toggle("hidden", tab !== "hmanhwa");
     if (tab === "hanime") renderTypeLibrary("ANIME");
-    if (tab === "hmanhwa") renderTypeLibrary("MANGA");
+    if (tab === "hmanhwa") showHmanhwaStatus(hmanhwaStatus || "ongoing");
   }
   pillTabs.forEach((b) => b.addEventListener("click", () => setPillTab(b.dataset.tab)));
 
-  // H-MANHWA status sub-tabs (Ongoing / Finished)
-  document.querySelectorAll(".status-tab[data-status]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      hmanhwaStatus = btn.dataset.status;
-      document.querySelectorAll(".status-tab[data-status]").forEach((b) => {
-        b.classList.toggle("active", b.dataset.status === hmanhwaStatus);
-      });
-      hmanhwaLetter = null; // reset letter filter when switching status
-      if (tabHmanhwa && !tabHmanhwa.classList.contains("hidden")) {
-        renderTypeLibrary("MANGA");
-      }
+  // H-MANHWA status sub-tabs (Ongoing discovery / Finished A–Z)
+  function showHmanhwaStatus(status) {
+    hmanhwaStatus = status;
+    document.querySelectorAll(".status-tab[data-status]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.status === status);
     });
+    if (hmanhwaOngoingPanel) hmanhwaOngoingPanel.classList.toggle("hidden", status !== "ongoing");
+    if (hmanhwaFinishedPanel) hmanhwaFinishedPanel.classList.toggle("hidden", status !== "finished");
+    if (status === "ongoing") {
+      if (!ongoingManhwa.length) loadOngoingManhwa();
+      else renderOngoingManhwa();
+    } else {
+      hmanhwaLetter = null;
+      renderTypeLibrary("MANGA");
+    }
+  }
+  document.querySelectorAll(".status-tab[data-status]").forEach((btn) => {
+    btn.addEventListener("click", () => showHmanhwaStatus(btn.dataset.status));
   });
+
+  function renderOngoingManhwa() {
+    if (!hmanhwaOngoingGrid) return;
+    hmanhwaOngoingGrid.innerHTML = "";
+    const availIndex = buildAvailableIndex();
+    ongoingManhwa.forEach((item) => {
+      const matched = availIndex.match(item);
+      item.matchedJoinLink = matched && matched.join_link ? matched.join_link : null;
+      hmanhwaOngoingGrid.appendChild(popularGridCard(item, () => openDiscoverDetail(item)));
+    });
+    if (hmanhwaOngoingMore) hmanhwaOngoingMore.classList.toggle("hidden", !ongoingManhwaHasNext);
+  }
+
+  async function loadOngoingManhwa() {
+    if (ongoingManhwaLoading) return;
+    ongoingManhwaLoading = true;
+    renderSkeletonRow(hmanhwaOngoingGrid, 6);
+    try {
+      const data = await api("/api/catalog/manga/airing");
+      ongoingManhwa = data.results || [];
+      ongoingManhwaHasNext = !!data.has_next;
+      ongoingManhwaPage = 1;
+    } catch (err) {
+      ongoingManhwa = [];
+      ongoingManhwaHasNext = false;
+    }
+    renderOngoingManhwa();
+    ongoingManhwaLoading = false;
+  }
+
+  async function loadMoreOngoingManhwa() {
+    if (ongoingManhwaLoading || !ongoingManhwaHasNext) return;
+    ongoingManhwaLoading = true;
+    if (hmanhwaOngoingMore) {
+      hmanhwaOngoingMore.disabled = true;
+      hmanhwaOngoingMore.textContent = "Loading…";
+    }
+    try {
+      const data = await api(`/api/catalog/manga/airing?page=${ongoingManhwaPage + 1}`);
+      ongoingManhwaPage += 1;
+      ongoingManhwa = ongoingManhwa.concat(data.results || []);
+      ongoingManhwaHasNext = !!data.has_next;
+      renderOngoingManhwa();
+    } catch (err) {
+      showToast("Couldn't load more right now.");
+    }
+    if (hmanhwaOngoingMore) {
+      hmanhwaOngoingMore.disabled = false;
+      hmanhwaOngoingMore.textContent = "Load more";
+    }
+    ongoingManhwaLoading = false;
+  }
+  if (hmanhwaOngoingMore) hmanhwaOngoingMore.addEventListener("click", loadMoreOngoingManhwa);
 
   // ---------------------------------------------------------------------
   // ALL tab — dual feeds (hentai vs manga/manhwa shown separately)
@@ -523,20 +590,19 @@
   if (allPopularMangaMore) allPopularMangaMore.addEventListener("click", loadMoreMangaPopular);
 
   async function loadAllDiscover() {
+    renderSkeletonRow(allTrendingHentai, 4);
+    renderSkeletonRow(allAiringHentai, 4);
+    renderSkeletonRow(allPopularHentai, 4);
+    renderSkeletonRow(allTrendingManga, 4);
+    renderSkeletonRow(allAiringManga, 4);
+    renderSkeletonRow(allPopularManga, 4);
+
+    // Wave 1: hentai (fill UI first)
     try {
-      renderSkeletonRow(allTrendingHentai, 4);
-      renderSkeletonRow(allTrendingManga, 4);
-      renderSkeletonRow(allAiringHentai, 4);
-      renderSkeletonRow(allAiringManga, 4);
-      renderSkeletonRow(allPopularHentai, 4);
-      renderSkeletonRow(allPopularManga, 4);
-      const [ht, ha, hp, mt, ma, mp] = await Promise.all([
+      const [ht, ha, hp] = await Promise.all([
         api("/api/catalog/trending"),
         api("/api/catalog/popular"),
         api("/api/catalog/most-popular"),
-        api("/api/catalog/manga/trending"),
-        api("/api/catalog/manga/airing"),
-        api("/api/catalog/manga/popular"),
       ]);
       hTrending = ht.results || [];
       hAiring = ha.results || [];
@@ -545,6 +611,22 @@
       hPopular = hp.results || [];
       hPopularHasNext = !!hp.has_next;
       hPopularPage = 1;
+    } catch (err) {
+      hTrending = []; hAiring = []; hPopular = [];
+      hPopularHasNext = false;
+    }
+    fillHscroll(allTrendingHentai, hTrending, trendingCard);
+    fillHscroll(allAiringHentai, hAiring, topAiringCard);
+    fillGrid(allPopularHentai, hPopular);
+    if (allPopularHentaiMore) allPopularHentaiMore.classList.toggle("hidden", !hPopularHasNext);
+
+    // Wave 2: manga / manhwa
+    try {
+      const [mt, ma, mp] = await Promise.all([
+        api("/api/catalog/manga/trending"),
+        api("/api/catalog/manga/airing"),
+        api("/api/catalog/manga/popular"),
+      ]);
       mTrending = mt.results || [];
       mAiring = ma.results || [];
       mAiringHasNext = !!ma.has_next;
@@ -553,11 +635,13 @@
       mPopularHasNext = !!mp.has_next;
       mPopularPage = 1;
     } catch (err) {
-      hTrending = []; hAiring = []; hPopular = [];
       mTrending = []; mAiring = []; mPopular = [];
-      hPopularHasNext = mPopularHasNext = false;
+      mPopularHasNext = false;
     }
-    renderAllTab();
+    fillHscroll(allTrendingManga, mTrending, trendingCard);
+    fillHscroll(allAiringManga, mAiring, topAiringCard);
+    fillGrid(allPopularManga, mPopular);
+    if (allPopularMangaMore) allPopularMangaMore.classList.toggle("hidden", !mPopularHasNext);
   }
 
   // ---------------------------------------------------------------------
@@ -582,7 +666,11 @@
     // Franchise collapse within the same media type only
     let pool = available.filter((a) => isMediaType(a, type));
     if (type === "MANGA") {
-      pool = pool.filter(matchesManhwaStatus);
+      // Finished A–Z only lists finished titles
+      pool = pool.filter((a) => {
+        const s = (a.status || "").toUpperCase();
+        return s === "FINISHED" || s === "CANCELLED";
+      });
     }
     const bySourceId = new Map();
     pool.forEach((a) => {
@@ -1568,7 +1656,10 @@
     // Refresh join-link badges on ALL + rebuild A–Z lists if Available is open
     if (tabAll && !tabAll.classList.contains("hidden")) renderAllTab();
     if (tabHanime && !tabHanime.classList.contains("hidden")) renderTypeLibrary("ANIME");
-    if (tabHmanhwa && !tabHmanhwa.classList.contains("hidden")) renderTypeLibrary("MANGA");
+    if (tabHmanhwa && !tabHmanhwa.classList.contains("hidden")) {
+      if (hmanhwaStatus === "ongoing") renderOngoingManhwa();
+      else renderTypeLibrary("MANGA");
+    }
   }
 
   async function preloadProfile() {

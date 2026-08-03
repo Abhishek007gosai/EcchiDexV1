@@ -82,17 +82,25 @@
         <p id="hanime-empty" class="empty-note hidden">No hanime posted yet. Open a title from ALL and use + to set a join link.</p>
       </div>
 
-      <!-- H-MANHWA: ONGOING / FINISHED sub-columns + A–Z -->
+      <!-- H-MANHWA: Ongoing = discovery (set links) | Finished = A–Z library -->
       <div id="tab-hmanhwa" class="hidden">
         <div class="status-tabs" role="tablist">
           <button class="status-tab active" data-status="ongoing" type="button">Ongoing</button>
           <button class="status-tab" data-status="finished" type="button">Finished</button>
         </div>
 
-        <h2 class="section-header section-header--available"><span class="accent-bar"></span>Available H-MANHWA</h2>
-        <div id="hmanhwa-letter-bar" class="letter-bar"></div>
-        <div id="hmanhwa-groups"></div>
-        <p id="hmanhwa-empty" class="empty-note hidden">No manhwa/manga posted yet. Open a title from ALL and use + to set a join link.</p>
+        <!-- Ongoing: browse releasing manhwa/manga and set join links -->
+        <div id="hmanhwa-ongoing-panel">
+          <div id="hmanhwa-ongoing-grid" class="popular-grid"></div>
+          <button id="hmanhwa-ongoing-more" class="load-more-btn" type="button">Load more</button>
+        </div>
+
+        <!-- Finished: A–Z + # of finished available titles -->
+        <div id="hmanhwa-finished-panel" class="hidden">
+          <div id="hmanhwa-letter-bar" class="letter-bar"></div>
+          <div id="hmanhwa-groups"></div>
+          <p id="hmanhwa-empty" class="empty-note hidden">No finished manhwa/manga posted yet. Open a title and use + to set a join link.</p>
+        </div>
       </div>
     </div>
   </main>
