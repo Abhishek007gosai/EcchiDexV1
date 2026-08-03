@@ -747,6 +747,8 @@
     const letterBarEl = isAnime ? hanimeLetterBar : hmanhwaLetterBar;
     const groupsEl = isAnime ? hanimeGroups : hmanhwaGroups;
     const emptyEl = isAnime ? hanimeEmpty : hmanhwaEmpty;
+    // Ongoing manhwa: no A–Z / # bar, flat grid
+    const hideLetters = !isAnime && hmanhwaStatus === "ongoing";
     let activeLetter = isAnime ? hanimeLetter : hmanhwaLetter;
     const setLetter = (v) => {
       if (isAnime) hanimeLetter = v;
@@ -754,12 +756,22 @@
       activeLetter = v;
     };
 
-    renderLetterBarFor(type, letterBarEl, activeLetter, setLetter);
+    if (letterBarEl) {
+      if (hideLetters) {
+        letterBarEl.innerHTML = "";
+        letterBarEl.classList.add("hidden");
+      } else {
+        letterBarEl.classList.remove("hidden");
+        renderLetterBarFor(type, letterBarEl, activeLetter, setLetter);
+      }
+    }
     if (!groupsEl) return;
     groupsEl.innerHTML = "";
 
     let list = primaryListForType(type);
-    if (activeLetter) list = list.filter((a) => indexKeyFor(a.title) === activeLetter);
+    if (!hideLetters && activeLetter) {
+      list = list.filter((a) => indexKeyFor(a.title) === activeLetter);
+    }
     list = [...list].sort((a, b) => a.title.localeCompare(b.title));
 
     if (emptyEl) {
@@ -771,6 +783,17 @@
               : "No finished manhwa/manga posted yet.")
           : emptyEl.textContent;
       }
+    }
+
+    if (hideLetters) {
+      // Flat grid — no letter group headers
+      const grid = document.createElement("div");
+      grid.className = "available-grid";
+      list.forEach((item) => {
+        grid.appendChild(simplePosterCard(item, () => openLocalDetail(item)));
+      });
+      groupsEl.appendChild(grid);
+      return;
     }
 
     const groups = {};
