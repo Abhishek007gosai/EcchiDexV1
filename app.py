@@ -1007,13 +1007,15 @@ def api_profile():
 
 @app.get("/api/profile/help")
 def api_profile_help():
-    """Need-help card: title, text, and link buttons for the Profile page."""
-    return jsonify(db.get_profile_help())
+    """Need-help card: title, text, link buttons, more-channels, and support chat."""
+    data = db.get_profile_help()
+    data["support_chat_url"] = Config.SUPPORT_CHAT_URL or ""
+    return jsonify(data)
 
 
 @app.put("/api/profile/help")
 def api_profile_help_update():
-    """Admin: update help card title/text and/or the list of links."""
+    """Admin: update help card title/text and/or the lists of links."""
     user = current_user()
     if not is_admin(user):
         abort(403)
@@ -1025,7 +1027,14 @@ def api_profile_help_update():
         if not isinstance(links, list):
             return jsonify(error="links must be a list"), 400
         db.set_profile_links(links)
-    return jsonify(db.get_profile_help())
+    if "more_links" in payload:
+        more_links = payload.get("more_links")
+        if not isinstance(more_links, list):
+            return jsonify(error="more_links must be a list"), 400
+        db.set_more_channel_links(more_links)
+    data = db.get_profile_help()
+    data["support_chat_url"] = Config.SUPPORT_CHAT_URL or ""
+    return jsonify(data)
 
 
 
