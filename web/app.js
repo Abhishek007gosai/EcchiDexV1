@@ -1724,14 +1724,16 @@
   }
 
   async function openProfile() {
-    profileCard.innerHTML = `<p class="profile-hint">Loading profile\u2026</p>`;
+    profileCard.innerHTML = `<p class="profile-hint">Loading profile…</p>`;
     try {
       profile = await api("/api/profile");
+      const help = await safeApi("/api/profile/help", { title: "Need help?", text: "", links: [] });
       const displayName = profile.first_name || profile.username || "User";
       const photoUrl = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.photo_url;
       const avatarHtml = photoUrl
         ? `<img class="profile-avatar profile-avatar-img" src="${escapeHtml(photoUrl)}" alt="${escapeHtml(displayName)}" onerror="this.replaceWith(Object.assign(document.createElement('div'), {className: 'profile-avatar', textContent: '${initials(displayName)}'}))" />`
         : `<div class="profile-avatar">${initials(displayName)}</div>`;
+      const links = Array.isArray(help.links) ? help.links : [];
       profileCard.innerHTML = `
         <div class="profile-header">
           ${avatarHtml}
@@ -1743,12 +1745,128 @@
         <div class="profile-row"><span class="label">Telegram ID</span><span class="value">${profile.telegram_id}</span></div>
         <div class="profile-row"><span class="label">Registered in bot</span><span class="value">yes</span></div>
         <div class="profile-row"><span class="label">Role</span><span class="value">${escapeHtml(profile.role)}</span></div>
-        <div class="profile-row"><span class="label">Access</span><span class="value">${escapeHtml(profile.access)}</span></div>
+        <div class="profile-row"><span class="label">Access</span><span class="value">${escapeHtml(profile.access || "active")}</span></div>
       `;
+
+      // Remove previous help stack
+      const parent = profileCard.parentElement;
+      if (parent) {
+        parent.querySelectorAll(".help-stack, .help-card").forEach((n) => n.remove());
+      }
+
+      const stack = document.createElement("div");
+      stack.className = "help-stack";
+
+      // Intro card (title + description) — always shown
+      const intro = document.createElement("div");
+      intro.className = "help-card";
+      intro.innerHTML = `
+        <h3 class="help-card-title">${escapeHtml(help.title || "Need help?")}</h3>
+        <p class="help-card-text">${escapeHtml(help.text || "Notifications, requests, and channel links are all managed through the bot.")}</p>
+      `;
+      stack.appendChild(intro);
+
+      // One full card UI per link (same design as the screenshot button)
+      links.forEach((l) => {
+        const name = (l.name || "Link").trim();
+        const url = (l.url || "").trim();
+        if (!name || !url) return;
+        const card = document.createElement("div");
+        card.className = "help-card help-card--link";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "help-link-btn";
+        btn.innerHTML = `<span class="help-link-icon">💬</span> ${escapeHtml(name)}`;
+        btn.addEventListener("click", () => {
+          if (tg && tg.openTelegramLink && /t\.me\//i.test(url)) tg.openTelegramLink(url);
+          else if (tg && tg.openLink) tg.openLink(url);
+          else window.open(url, "_blank");
+        });
+        card.appendChild(btn);
+        stack.appendChild(card);
+      });
+
+      if (profile.role === "admin") {
+        const admin = document.createElement("div");
+        admin.className = "help-card-admin";
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.textContent = links.length ? "Edit links" : "Add links";
+        editBtn.addEventListener("click", () => openHelpEdit(help));
+        admin.appendChild(editBtn);
+        stack.appendChild(admin);
+      }
+
+      if (parent) parent.insertBefore(stack, profileCard.nextSibling);
+      else profileCard.appendChild(stack);
     } catch (err) {
       profileCard.innerHTML = `<p class="profile-hint">${escapeHtml(err.message || "Open this from inside Telegram to view your profile.")}</p>`;
     }
   }
+
+  function openHelpEdit(help) {
+    const overlay = el("help-edit-overlay");
+    if (!overlay) return;
+    el("help-edit-title").value = help.title || "";
+    el("help-edit-text").value = help.text || "";
+    const box = el("help-edit-links");
+    box.innerHTML = "";
+    const links = (help.links && help.links.length)
+      ? help.links
+      : [{ name: "", url: "" }, { name: "", url: "" }];
+    links.forEach((l) => box.appendChild(helpEditRow(l.name || "", l.url || "")));
+    overlay.classList.remove("hidden");
+  }
+
+  function helpEditRow(name, url) {
+    const row = document.createElement("div");
+    row.className = "help-edit-row";
+    row.innerHTML = `
+      <input type="text" class="help-edit-name" placeholder="Button name" value="" />
+      <input type="text" class="help-edit-url" placeholder="https://t.me/..." value="" />
+      <div class="help-edit-actions"><button type="button" class="help-edit-remove">Remove</button></div>
+    `;
+    row.querySelector(".help-edit-name").value = name;
+    row.querySelector(".help-edit-url").value = url;
+    row.querySelector(".help-edit-remove").addEventListener("click", () => row.remove());
+    return row;
+  }
+
+  function closeHelpEdit() {
+    const overlay = el("help-edit-overlay");
+    if (overlay) overlay.classList.add("hidden");
+  }
+
+  (function wireHelpEdit() {
+    const overlay = el("help-edit-overlay");
+    if (!overlay) return;
+    el("help-edit-cancel").addEventListener("click", closeHelpEdit);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closeHelpEdit(); });
+    el("help-edit-add").addEventListener("click", () => {
+      el("help-edit-links").appendChild(helpEditRow("", ""));
+    });
+    el("help-edit-save").addEventListener("click", async () => {
+      const title = el("help-edit-title").value.trim();
+      const text = el("help-edit-text").value.trim();
+      const links = [];
+      el("help-edit-links").querySelectorAll(".help-edit-row").forEach((row) => {
+        const name = row.querySelector(".help-edit-name").value.trim();
+        const url = row.querySelector(".help-edit-url").value.trim();
+        if (name && url) links.push({ name, url });
+      });
+      try {
+        await api("/api/profile/help", {
+          method: "PUT",
+          body: JSON.stringify({ title, text, links }),
+        });
+        closeHelpEdit();
+        showToast("Profile links saved");
+        openProfile();
+      } catch (err) {
+        showToast(err.message || "Could not save");
+      }
+    });
+  })();
 
   // ---------------------------------------------------------------------
   // Notifications (request accepted/rejected) — the bell in the header

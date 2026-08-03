@@ -789,6 +789,102 @@ html, body {
 .profile-row .label { color: var(--text-dim); }
 .profile-row .value { font-family: inherit; }
 
+/* Profile help / links card */
+.help-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+.help-card {
+  margin-top: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 16px;
+}
+.help-card--link {
+  padding: 14px;
+}
+.help-card--link .help-link-btn {
+  margin-top: 0;
+}
+.help-card-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.help-card-text {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.help-link-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 13px 16px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #ec4899 0%, #a855f7 55%, #8b5cf6 100%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(168, 85, 247, 0.28);
+}
+.help-link-btn:active { transform: scale(0.98); opacity: 0.95; }
+.help-link-btn .help-link-icon { font-size: 16px; line-height: 1; }
+.help-card-admin {
+  margin-top: 12px;
+  text-align: center;
+}
+.help-card-admin button {
+  background: none;
+  border: none;
+  color: var(--accent, #6ee7b7);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 8px;
+}
+.help-edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.help-edit-row input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2, #1a1f1a);
+  color: var(--text);
+  font-size: 14px;
+}
+.help-edit-row .help-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.help-edit-row .help-edit-actions button {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* ---------------- overlays / compact centered modal ---------------- */
 
 .overlay {
