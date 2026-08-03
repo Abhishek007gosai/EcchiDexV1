@@ -30,14 +30,7 @@ class Config:
     # Markdown (e.g. _italics_, *bold*). Since env vars are single-line,
     # write literal "\n" for line breaks — they're converted to real
     # newlines below.
-    START_MSG = os.environ.get(
-        "START_MSG",
-        "HELLO {first_name}\n\n"
-        "I am {brand_name} bot. Use /anidex to browse, search and request anime.\n\n"
-        "\U0001f4fa Browse trending anime, search for your favorites, and "
-        "request anime that isn't available yet.\n\n"
-        "_Your all-in-one anime station._",
-    ).replace("\\n", "\n")
+    START_MSG = os.environ.get("START_MSG", "ᴛʜɪs ɪs ᴀɴɪᴍᴇ ɪɴᴅᴇx ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ʙʀᴏᴡsᴇ, sᴇᴀʀᴄʜ ʏᴏᴜ ғᴀᴠᴏᴜʀɪᴛᴇ ᴀɴɪᴍᴇ")
 
     # --- Telegram bot (Bot API) ---
     BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -45,9 +38,9 @@ class Config:
     # Public HTTPS base URL of this deployment, e.g. https://anime-index.onrender.com
     WEBAPP_URL = os.environ.get("WEBAPP_URL", "").rstrip("/")
     # Channel/group the bot posts request + report notifications to (e.g. -1001234567890)
-    LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", "")
+    LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID", "-1002456565415")
     # Telegram user IDs allowed to run /addpost, /delpost, and edit links in-app
-    ADMIN_IDS = _split_ids(os.environ.get("ADMIN_IDS", ""))
+    ADMIN_IDS = _split_ids(os.environ.get("ADMIN_IDS", "8771195193"))
 
     # --- Telegram API (MTProto — api_id/api_hash from my.telegram.org) ---
     # Not used by the current Bot-API-only code path. Reserved for a future
@@ -65,7 +58,7 @@ class Config:
     # --- Database (MongoDB) ---
     # Full connection string, e.g. mongodb+srv://user:pass@cluster.mongodb.net
     MONGODB_URL = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
-    MONGODB_NAME = os.environ.get("MONGODB_NAME", "anime_index")
+    MONGODB_NAME = os.environ.get("MONGODB_NAME", "cluster0")
 
     # --- External metadata sources ---
     ANILIST_ENDPOINT = "https://graphql.anilist.co"
