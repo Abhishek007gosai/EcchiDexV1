@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#131310" />
   <title>{{ brand_name }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=15" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=16" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body data-brand="{{ brand_name }}">
@@ -67,10 +67,10 @@
           </div>
           <p class="sub-section-label">Hentai</p>
           <div id="all-popular-hentai" class="popular-grid"></div>
-          <button id="all-popular-hentai-more" class="load-more-btn" type="button">Load more hentai</button>
+          <button id="all-popular-hentai-more" class="load-more-btn hidden" type="button">Load more</button>
           <p class="sub-section-label" style="margin-top:16px">Manga / Manhwa</p>
           <div id="all-popular-manga" class="popular-grid"></div>
-          <button id="all-popular-manga-more" class="load-more-btn" type="button">Load more manga</button>
+          <button id="all-popular-manga-more" class="load-more-btn hidden" type="button">Load more</button>
         </section>
       </div>
 
@@ -91,7 +91,7 @@
 
         <div id="hmanhwa-ongoing-panel">
           <div id="hmanhwa-ongoing-grid" class="popular-grid"></div>
-          <button id="hmanhwa-ongoing-more" class="load-more-btn" type="button">Load more</button>
+          <button id="hmanhwa-ongoing-more" class="load-more-btn hidden" type="button">Load more</button>
           <p id="hmanhwa-ongoing-empty" class="empty-note hidden">Couldn't load ongoing titles. Pull to refresh or try again later.</p>
         </div>
 
@@ -102,19 +102,6 @@
         </div>
       </div>
 
-        <!-- Ongoing: browse releasing manhwa/manga and set join links -->
-        <div id="hmanhwa-ongoing-panel">
-          <div id="hmanhwa-ongoing-grid" class="popular-grid"></div>
-          <button id="hmanhwa-ongoing-more" class="load-more-btn" type="button">Load more</button>
-        </div>
-
-        <!-- Finished: A–Z + # of finished available titles -->
-        <div id="hmanhwa-finished-panel" class="hidden">
-          <div id="hmanhwa-letter-bar" class="letter-bar"></div>
-          <div id="hmanhwa-groups"></div>
-          <p id="hmanhwa-empty" class="empty-note hidden">No finished manhwa/manga posted yet. Open a title and use + to set a join link.</p>
-        </div>
-      </div>
     </div>
   </main>
 
@@ -278,6 +265,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=15"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=16"></script>
 </body>
 </html>

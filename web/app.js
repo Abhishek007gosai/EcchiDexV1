@@ -627,7 +627,7 @@
     }
     if (allPopularHentaiMore) {
       allPopularHentaiMore.disabled = false;
-      allPopularHentaiMore.textContent = "Load more hentai";
+      allPopularHentaiMore.textContent = "Load more";
       allPopularHentaiMore.classList.toggle("hidden", !hPopularHasNext);
     }
     hPopularLoading = false;
@@ -651,7 +651,7 @@
     }
     if (allPopularMangaMore) {
       allPopularMangaMore.disabled = false;
-      allPopularMangaMore.textContent = "Load more manga";
+      allPopularMangaMore.textContent = "Load more";
       allPopularMangaMore.classList.toggle("hidden", !mPopularHasNext);
     }
     mPopularLoading = false;
@@ -678,7 +678,7 @@
     renderSkeletonRow(allAiringManga, 4);
     renderSkeletonRow(allPopularManga, 4);
 
-    // Wave 1: MangaDex first (usually fastest / most reliable)
+    // Wave 1: manga / manhwa / doujin (AniList)
     const [mt, ma, mp] = await Promise.all([
       safeApi("/api/catalog/manga/trending"),
       safeApi("/api/catalog/manga/airing"),
@@ -1194,7 +1194,7 @@
     linkInput.value = anime.join_link || "";
     const picker = el("link-section-picker");
     const hint = el("link-section-hint");
-    const isManga = (anime.media_type || "").toUpperCase() === "MANGA" || anime.source === "mangadex";
+    const isManga = (anime.media_type || "").toUpperCase() === "MANGA";
     if (picker) picker.classList.toggle("hidden", !isManga);
     if (hint) hint.classList.toggle("hidden", !isManga);
     const preferred = (anime.library_section || (isManga ? "ongoing" : "") || "ongoing").toLowerCase();
