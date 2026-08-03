@@ -402,7 +402,7 @@ html, body {
 
 .poster-card img {
   width: 100%;
-  height: 178px;
+  height: 148px;
   object-fit: cover;
   display: block;
 }
@@ -479,14 +479,14 @@ html, body {
 }
 
 .hscroll .skeleton-card { width: 132px; height: 178px; }
-.popular-grid .skeleton-card { height: 178px; }
+.popular-grid .skeleton-card { height: 148px; }
 
 /* ---------------- Popular grid (2-column, reuses poster-card) ---------------- */
 
 .popular-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px 12px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px 10px;
   padding-bottom: 16px;
 }
 
@@ -611,8 +611,8 @@ html, body {
 .letter-group-label { color: var(--green); font-weight: 700; font-size: 14px; }
 .letter-group-line { flex: 1; height: 1px; background: var(--border); }
 
-.available-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.available-grid .poster-card img { height: 208px; }
+.available-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.available-grid .poster-card img { height: 148px; }
 
 /* ---------------- bottom nav ---------------- */
 

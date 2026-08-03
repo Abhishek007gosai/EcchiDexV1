@@ -818,11 +818,6 @@
       sheetMedia.querySelectorAll(".generated-thumb").forEach((n) => n.remove());
       detailPoster.src = "";
       detailPoster.style.display = "";
-      // A true banner is already wide, so a centered cover-crop looks right.
-      // A portrait poster forced into that same short, wide box can't be
-      // cover-cropped without zooming in hard and losing most of the art
-      // (usually landing on a jarring close-up of just the eyes). Instead,
-      // show it uncropped over a blurred version of itself as a backdrop.
       detailPoster.classList.toggle("poster-fallback", !hasRealBanner);
       sheetMedia.classList.toggle("has-blur-bg", !hasRealBanner && !!bannerSrc);
       if (!hasRealBanner && bannerSrc) {
@@ -1792,6 +1787,8 @@
     if (!overlay) return;
     el("help-edit-title").value = help.title || "";
     el("help-edit-text").value = help.text || "";
+    const supportInput = el("help-edit-support");
+    if (supportInput) supportInput.value = help.support_chat_url || "";
     const box = el("help-edit-links");
     box.innerHTML = "";
     const links = (help.links && help.links.length)
@@ -1857,12 +1854,14 @@
     el("help-edit-save").addEventListener("click", async () => {
       const title = el("help-edit-title").value.trim();
       const text = el("help-edit-text").value.trim();
+      const supportInput = el("help-edit-support");
+      const support_chat_url = supportInput ? supportInput.value.trim() : "";
       const links = collectLinkRows("help-edit-links");
       const more_links = collectLinkRows("help-edit-more-links");
       try {
         await api("/api/profile/help", {
           method: "PUT",
-          body: JSON.stringify({ title, text, links, more_links }),
+          body: JSON.stringify({ title, text, support_chat_url, links, more_links }),
         });
         closeHelpEdit();
         showToast("Profile links saved");
