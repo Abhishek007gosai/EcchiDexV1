@@ -625,8 +625,8 @@ def healthz():
 
 @app.get("/api/img")
 def api_proxy_image():
-    """Proxy remote cover images (MangaDex etc.) so the Telegram WebView can
-    display them. Only allowlisted hosts are fetched."""
+    """Proxy remote cover images so the Telegram WebView can display them.
+    Only allowlisted hosts are fetched."""
     from urllib.parse import urlparse, unquote
 
     raw = request.args.get("u") or ""
@@ -635,13 +635,11 @@ def api_proxy_image():
         abort(400)
     host = (urlparse(url).hostname or "").lower()
     allowed = {
-        "uploads.mangadex.org",
-        "mangadex.org",
         "s4.anilist.co",
         "s3.anilist.co",
         "cdn.myanimelist.net",
     }
-    if host not in allowed and not host.endswith(".mangadex.org"):
+    if host not in allowed:
         abort(403)
     try:
         upstream = requests.get(
@@ -702,7 +700,7 @@ def api_most_popular():
 def api_manga_trending():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["mangadex"].get_trending_manga(page))
+        resp = jsonify(SOURCES["anilist"].get_trending_manga(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
     resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
@@ -713,7 +711,7 @@ def api_manga_trending():
 def api_manga_airing():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["mangadex"].get_airing_manga(page))
+        resp = jsonify(SOURCES["anilist"].get_airing_manga(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
     resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
@@ -724,7 +722,7 @@ def api_manga_airing():
 def api_manga_popular():
     page = request.args.get("page", 1, type=int)
     try:
-        resp = jsonify(SOURCES["mangadex"].get_popular_manga(page))
+        resp = jsonify(SOURCES["anilist"].get_popular_manga(page))
     except requests.RequestException:
         return jsonify({"results": [], "has_next": False})
     resp.headers["Cache-Control"] = f"public, max-age={Config.CATALOG_CACHE_TTL}"
@@ -837,12 +835,11 @@ def api_anime_detail(anime_id):
 
 @app.get("/api/source/<source>/<path:source_id>")
 def api_source_details(source, source_id):
-    """Fetch full details from any registered source (anilist / mangadex)."""
+    """Fetch full details from any registered source (anilist)."""
     src = SOURCES.get(source)
     if not src:
         abort(404)
     try:
-        # AniList ids are ints; MangaDex ids are UUIDs
         sid = int(source_id) if source == "anilist" else source_id
         details = src.get_details(sid)
     except (requests.RequestException, ValueError, KeyError):
