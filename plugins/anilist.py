@@ -314,11 +314,26 @@ class AniListSource(AnimeSource):
 
     def _cached(self, key: str, fetch):
         now = time.time()
+        # L1: process memory
         cached = self._cache.get(key)
         if cached and now - cached[0] < Config.CATALOG_CACHE_TTL:
             return cached[1]
+        # L2: MongoDB (shared across restarts / single worker)
+        try:
+            from database import database as db
+            mongo_hit = db.cache_get(key)
+            if mongo_hit is not None:
+                self._cache[key] = (now, mongo_hit)
+                return mongo_hit
+        except Exception:
+            pass
         value = fetch()
         self._cache[key] = (now, value)
+        try:
+            from database import database as db
+            db.cache_set(key, value)
+        except Exception:
+            pass
         return value
 
     def _discover(self, sort: str, page: int = 1, query: str = DISCOVER_QUERY, cache_prefix: str = "") -> dict:
